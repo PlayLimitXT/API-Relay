@@ -1,0 +1,30 @@
+# API Relay Service Dependencies
+
+# Web Framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+starlette>=0.36.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Database
+aiosqlite>=0.19.0
+
+# HTTP Client
+httpx>=0.26.0
+
+# Authentication & Security
+python-multipart>=0.0.6
+
+# Templates
+jinja2>=3.1.0
+
+# Production Server (optional)
+# gunicorn>=21.2.0
+
+# For production deployment with SSL/TLS
+# uvicorn[standard]>=0.27.0
+
+# For async process management
+# anyio>=4.0.0  # Comes with fastapi

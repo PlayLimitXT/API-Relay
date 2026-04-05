@@ -1,0 +1,24 @@
+# API Relay Service - Docker Compose
+version: '3.8'
+
+services:
+  api-relay:
+    build: .
+    container_name: api-relay
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./database:/app/database
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
