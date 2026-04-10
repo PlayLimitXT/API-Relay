@@ -100,7 +100,7 @@ async def init_database():
             )
         """)
 
-        # 创建请求日志表
+        # 创建请求日志表（增强版）
         await db.execute("""
             CREATE TABLE IF NOT EXISTS request_logs (
                 log_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,16 +109,18 @@ async def init_database():
                 client_ip TEXT,
                 model TEXT NOT NULL,
                 source_model TEXT,
+                source_id TEXT,
                 status_code INTEGER,
                 input_tokens INTEGER,
                 output_tokens INTEGER,
                 response_time_ms INTEGER,
                 error_message TEXT,
+                error_type TEXT,
                 FOREIGN KEY (key_id) REFERENCES api_keys(key_id)
             )
         """)
 
-        # 创建统计表（按日）
+        # 创建统计表（按日，增强版）
         await db.execute("""
             CREATE TABLE IF NOT EXISTS statistics (
                 stat_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,12 +130,13 @@ async def init_database():
                 total_input_tokens INTEGER DEFAULT 0,
                 total_output_tokens INTEGER DEFAULT 0,
                 total_errors INTEGER DEFAULT 0,
+                avg_response_time_ms REAL DEFAULT 0,
                 UNIQUE(key_id, date),
                 FOREIGN KEY (key_id) REFERENCES api_keys(key_id)
             )
         """)
 
-        # 创建实时统计表
+        # 创建实时统计表（增强版）
         await db.execute("""
             CREATE TABLE IF NOT EXISTS realtime_stats (
                 key_id TEXT,
@@ -143,8 +146,85 @@ async def init_database():
                 output_tokens INTEGER DEFAULT 0,
                 request_count INTEGER DEFAULT 0,
                 error_count INTEGER DEFAULT 0,
+                avg_response_time_ms REAL DEFAULT 0,
+                concurrent_count INTEGER DEFAULT 0,
                 last_updated TEXT,
                 PRIMARY KEY (key_id, stat_type, period)
+            )
+        """)
+
+        # 创建IP统计表
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS ip_statistics (
+                ip_address TEXT PRIMARY KEY,
+                request_count INTEGER DEFAULT 0,
+                last_request_time TEXT,
+                first_request_time TEXT,
+                unique_models TEXT,
+                unique_keys TEXT
+            )
+        """)
+
+        # 创建模型统计表（按模型维度）
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS model_statistics (
+                model_id TEXT,
+                date TEXT NOT NULL,
+                request_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                error_count INTEGER DEFAULT 0,
+                avg_response_time_ms REAL DEFAULT 0,
+                PRIMARY KEY (model_id, date)
+            )
+        """)
+
+        # 创建源模型统计表（按源模型维度）
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS source_model_statistics (
+                source_model TEXT,
+                source_id TEXT,
+                date TEXT NOT NULL,
+                request_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                error_count INTEGER DEFAULT 0,
+                avg_response_time_ms REAL DEFAULT 0,
+                PRIMARY KEY (source_model, source_id, date)
+            )
+        """)
+
+        # 创建源提供商统计表（按源API维度）
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS source_api_statistics (
+                source_id TEXT,
+                date TEXT NOT NULL,
+                request_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                error_count INTEGER DEFAULT 0,
+                avg_response_time_ms REAL DEFAULT 0,
+                PRIMARY KEY (source_id, date)
+            )
+        """)
+
+        # 创建错误统计表
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS error_statistics (
+                error_type TEXT,
+                status_code INTEGER,
+                date TEXT NOT NULL,
+                error_count INTEGER DEFAULT 0,
+                PRIMARY KEY (error_type, status_code, date)
+            )
+        """)
+
+        # 创建并发监控表
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS concurrent_monitor (
+                timestamp TEXT PRIMARY KEY,
+                active_requests INTEGER DEFAULT 0,
+                active_sources TEXT
             )
         """)
 
@@ -177,6 +257,51 @@ async def init_database():
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_model_bindings_source
             ON model_bindings(source_id)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_logs_client_ip
+            ON request_logs(client_ip)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_logs_source_id
+            ON request_logs(source_id)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_logs_source_model
+            ON request_logs(source_model)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_logs_error_type
+            ON request_logs(error_type)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_request_logs_status_code
+            ON request_logs(status_code)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_model_statistics_date
+            ON model_statistics(date)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_source_model_statistics_date
+            ON source_model_statistics(date)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_source_api_statistics_date
+            ON source_api_statistics(date)
+        """)
+
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_error_statistics_date
+            ON error_statistics(date)
         """)
 
         await db.commit()

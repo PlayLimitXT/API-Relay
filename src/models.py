@@ -21,6 +21,7 @@ class SourceAPICreate(BaseModel):
     name: str
     base_url: str
     api_key: str
+    supported_models: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
 
 

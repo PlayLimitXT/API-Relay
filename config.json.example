@@ -8,6 +8,24 @@
     "global_rpm": 10000,
     "default_key_rpm": 60
   },
+  "privacy_filter": {
+    "enabled": false,
+    "filter_metadata": true,
+    "filter_usage_details": true,
+    "filter_model_info": true,
+    "filter_provider_info": true,
+    "filter_error_details": true,
+    "custom_error_messages": {
+      "401": "Authentication failed",
+      "403": "Access forbidden",
+      "404": "Resource not found",
+      "429": "Rate limit exceeded",
+      "500": "Internal server error",
+      "502": "Service unavailable",
+      "503": "Service temporarily unavailable",
+      "504": "Request timeout"
+    }
+  },
   "models": {
     "default": {
       "source_base_url": "https://openrouter.ai/api/v1",

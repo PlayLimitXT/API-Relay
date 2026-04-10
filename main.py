@@ -34,7 +34,7 @@ def _load_env_file(env_path: Path):
 _env_file = Path(__file__).parent / ".env"
 _load_env_file(_env_file)
 
-from src.database import init_database
+from src.database import init_database, get_db
 from src.models import (
     AdminLogin, APIKeyCreate, APIKeyResponse, APIKeyInfo,
     ChatCompletionRequest, ConfigUpdate
@@ -97,7 +97,7 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 config = _load_config()
 
 # 创建FastAPI应用
-app = FastAPI(title="API Relay Service", version="1.0.0")
+app = FastAPI(title="API Relay Service", version="1.1.0")
 
 # CORS配置
 app.add_middleware(
@@ -253,7 +253,8 @@ async def chat_completions(request: Request):
                     await log_request(
                         key_info['key_id'], client_ip, model_name,
                         model_config.source_model, 200,
-                        input_tokens, output_tokens, response_time_ms
+                        input_tokens, output_tokens, response_time_ms,
+                        source_id=model_config.source_id
                     )
 
             return StreamingResponse(
@@ -271,7 +272,8 @@ async def chat_completions(request: Request):
                 key_info['key_id'], client_ip, model_name,
                 model_config.source_model, result['status_code'],
                 result['input_tokens'], result['output_tokens'],
-                result['response_time_ms']
+                result['response_time_ms'],
+                source_id=model_config.source_id
             )
 
             return result['response']
@@ -281,7 +283,8 @@ async def chat_completions(request: Request):
         await log_request(
             key_info['key_id'], client_ip, model_name,
             model_config.source_model, e.status_code,
-            0, 0, response_time_ms, str(e.detail)
+            0, 0, response_time_ms, str(e.detail),
+            source_id=model_config.source_id
         )
         raise e
     except Exception as e:
@@ -290,7 +293,8 @@ async def chat_completions(request: Request):
         await log_request(
             key_info['key_id'], client_ip, model_name,
             model_config.source_model, 500,
-            0, 0, response_time_ms, str(e)
+            0, 0, response_time_ms, str(e),
+            source_id=model_config.source_id
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -575,16 +579,35 @@ async def delete_model_binding(binding_id: str, request: Request):
 
 # ==================== 管理员API端点 ====================
 
+# ==================== 常量定义 ====================
+BEARER_PREFIX = "Bearer "
+SESSION_TOKEN_HEADER = "X-Session-Token"
+CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
+EMBEDDINGS_ENDPOINT = "/embeddings"
+
+
+def verify_admin_session_or_raise(request: Request):
+    """验证管理员会话，未通过则抛出 HTTPException"""
+    session_token = request.headers.get(SESSION_TOKEN_HEADER, "")
+    if session_token not in admin_sessions:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    session = admin_sessions[session_token]
+    if datetime.now() >= session['expires_at']:
+        del admin_sessions[session_token]
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def verify_admin_session(session_token: str) -> bool:
-    """验证管理员会话"""
-    if session_token in admin_sessions:
-        session = admin_sessions[session_token]
-        # 检查会话是否过期（24小时）
-        if datetime.now() < session['expires_at']:
-            return True
-        else:
-            del admin_sessions[session_token]
-    return False
+    """验证管理员会话（兼容性包装）"""
+    try:
+        # 构造伪Request来复用验证逻辑
+        class FakeRequest:
+            def __init__(self, token):
+                self.headers = {"X-Session-Token": token}
+        verify_admin_session_or_raise(FakeRequest(session_token))
+        return True
+    except HTTPException:
+        return False
 
 
 @app.post("/admin/api/login")
@@ -870,7 +893,7 @@ async def admin_cleanup_orphan_logs(request: Request):
         logger.log_info(f"清理孤立日志: 删除了 {orphan_count} 条记录")
         return {"message": f"清理完成，删除了 {orphan_count} 条孤立日志", "deleted_count": orphan_count}
     finally:
-        await db.close()
+        pass  # 不关闭全局连接池
 
 
 @app.get("/admin/api/statistics")
@@ -929,7 +952,7 @@ async def admin_trend_stats(
     request: Request,
     period: str = "24h"
 ):
-    """获取趋势数据（24小时/7天）"""
+    """获取趋势数据（24小时/7天）- 增强版"""
     session_token = request.headers.get("X-Session-Token", "")
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -939,7 +962,9 @@ async def admin_trend_stats(
     return {
         "period": period,
         "hourly_trend": dashboard.get('hourly_trend', []),
-        "daily_trend": dashboard.get('daily_trend', [])
+        "daily_trend": dashboard.get('daily_trend', []),
+        "avg_response_time_today": dashboard.get('avg_response_time_today', 0),
+        "active_ips_24h": dashboard.get('active_ips_24h', 0)
     }
 
 
@@ -1003,6 +1028,14 @@ async def admin_update_config(request: Request):
             config['logging'] = {}
         config['logging'].update(body['logging'])
 
+    if 'privacy_filter' in body:
+        # 增量更新隐私过滤配置（深合并）
+        if 'privacy_filter' not in config:
+            config['privacy_filter'] = {}
+        for key, value in body['privacy_filter'].items():
+            if value is not None:
+                config['privacy_filter'][key] = value
+
     # 先保存到临时文件，成功后再替换
     temp_path = CONFIG_PATH.with_suffix('.json.tmp')
     backup_path = CONFIG_PATH.with_suffix('.json.bak')
@@ -1031,8 +1064,8 @@ async def admin_update_config(request: Request):
         proxy.config = config
         proxy.load_models_config()
 
-        logger.log_info("Configuration updated")
-        return {"message": "Configuration updated"}
+        logger.log_info(f"Configuration updated. Privacy filter: {config.get('privacy_filter', {})}")
+        return {"message": "Configuration saved successfully", "config": config}
 
     except Exception as e:
         # 恢复备份
@@ -1040,6 +1073,13 @@ async def admin_update_config(request: Request):
             backup_path.rename(CONFIG_PATH)
         logger.log_error(f"Config update failed: {e}")
         raise HTTPException(status_code=500, detail=f"Config update failed: {str(e)}")
+    finally:
+        # 清理临时文件
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
 
 
 @app.get("/admin/api/user-stats/{key_id}")
@@ -1062,6 +1102,230 @@ async def admin_model_stats(request: Request, model: str):
 
     stats = await get_model_stats(model)
     return stats
+
+
+# ==================== 新增统计API端点 ====================
+
+@app.get("/admin/api/ip-stats")
+async def admin_ip_stats(request: Request, limit: int = 50):
+    """IP统计"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.stats import get_ip_stats
+    stats = await get_ip_stats(limit)
+    return {"ip_stats": stats}
+
+
+@app.get("/admin/api/model-statistics")
+async def admin_model_statistics(request: Request, limit_days: int = 30):
+    """模型统计（按虚拟模型ID）"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    stats = await get_model_statistics(limit_days)
+    return {"model_statistics": stats}
+
+
+@app.get("/admin/api/source-model-statistics")
+async def admin_source_model_statistics(request: Request, limit_days: int = 30):
+    """源模型统计"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.stats import get_source_model_statistics
+    stats = await get_source_model_statistics(limit_days)
+    return {"source_model_statistics": stats}
+
+
+@app.get("/admin/api/source-api-statistics")
+async def admin_source_api_statistics(request: Request, limit_days: int = 30):
+    """源提供商统计"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.stats import get_source_api_statistics
+    stats = await get_source_api_statistics(limit_days)
+    return {"source_api_statistics": stats}
+
+
+@app.get("/admin/api/error-statistics")
+async def admin_error_statistics(request: Request, limit_days: int = 30):
+    """错误统计"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.stats import get_error_statistics
+    stats = await get_error_statistics(limit_days)
+    return {"error_statistics": stats}
+
+
+@app.get("/admin/api/realtime-stats")
+async def admin_realtime_stats(request: Request):
+    """实时统计（并发数、请求速率等）"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.stats import get_realtime_concurrent_stats
+    stats = await get_realtime_concurrent_stats()
+    return stats
+
+
+# ==================== 数据库导入导出API ====================
+
+@app.get("/admin/api/database/export")
+async def export_database(request: Request):
+    """导出数据库"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+
+    # 创建内存中的zip文件
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # 导出各个表
+        tables = [
+            'api_keys', 'source_apis', 'virtual_models', 'model_bindings',
+            'request_logs', 'statistics', 'realtime_stats',
+            'ip_statistics', 'model_statistics', 'source_model_statistics',
+            'source_api_statistics', 'error_statistics', 'concurrent_monitor'
+        ]
+
+        for table in tables:
+            cursor = await db.execute(f"SELECT * FROM {table}")
+            rows = await cursor.fetchall()
+
+            # 获取列名
+            cursor = await db.execute(f"PRAGMA table_info({table})")
+            columns = [col[1] for col in await cursor.fetchall()]
+
+            # 转换为CSV格式
+            csv_data = ','.join(columns) + '\n'
+            for row in rows:
+                csv_data += ','.join([str(val) if val is not None else '' for val in row]) + '\n'
+
+            zip_file.writestr(f"{table}.csv", csv_data)
+
+    zip_buffer.seek(0)
+
+    # 返回文件
+    from datetime import datetime
+    filename = f"relay_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+
+    return StreamingResponse(
+        iter([zip_buffer.getvalue()]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.post("/admin/api/database/import")
+async def import_database(request: Request):
+    """导入数据库"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import zipfile
+    import tempfile
+    import os
+
+    # 获取上传的文件
+    form = await request.form()
+    if 'file' not in form:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    file = form['file']
+    content = await file.read()
+
+    # 保存到临时文件
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_file:
+        tmp_file.write(content)
+        tmp_path = tmp_file.name
+
+    try:
+        db = await get_db()
+
+        with zipfile.ZipFile(tmp_path, 'r') as zip_file:
+            # 读取并导入各个表
+            for file_info in zip_file.filelist:
+                if file_info.filename.endswith('.csv'):
+                    table_name = file_info.filename[:-4]  # 去掉.csv后缀
+
+                    # 读取CSV数据
+                    with zip_file.open(file_info.filename) as csv_file:
+                        content = csv_file.read().decode('utf-8')
+                        lines = content.strip().split('\n')
+
+                        if len(lines) < 2:
+                            continue
+
+                        columns = lines[0].split(',')
+                        values_list = []
+                        for line in lines[1:]:
+                            values = line.split(',')
+                            values_list.append(values)
+
+                        # 清空目标表
+                        await db.execute(f"DELETE FROM {table_name}")
+
+                        # 插入数据
+                        if values_list:
+                            placeholders = ','.join(['?' for _ in columns])
+                            insert_sql = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
+
+                            for values in values_list:
+                                await db.execute(insert_sql, values)
+
+        await db.commit()
+        logger.log_info("Database imported successfully")
+        return {"message": "Database imported successfully"}
+
+    except Exception as e:
+        logger.log_error(f"Database import failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+    finally:
+        os.unlink(tmp_path)
+
+
+@app.post("/admin/api/database/backup")
+async def backup_database(request: Request):
+    """创建数据库备份"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import shutil
+    from datetime import datetime
+
+    # 备份数据库文件
+    backup_dir = DATABASE_PATH.parent / "backups"
+    backup_dir.mkdir(exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_path = backup_dir / f"relay_{timestamp}.db"
+
+    shutil.copy2(DATABASE_PATH, backup_path)
+
+    logger.log_info(f"Database backed up to {backup_path}")
+    return {
+        "message": "Database backed up successfully",
+        "backup_file": str(backup_path),
+        "timestamp": timestamp
+    }
 
 
 # ==================== 管理面板静态文件 ====================

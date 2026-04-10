@@ -19,9 +19,13 @@ async def create_source_api(data: SourceAPICreate) -> Dict[str, Any]:
     source_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
 
-    # 从metadata中提取supported_models
-    meta = data.metadata.copy() if data.metadata else None
-    supported_models = meta.pop('supported_models', None) if meta else None
+    # 优先使用直接传入的 supported_models，其次从 metadata 中提取
+    supported_models = data.supported_models
+    if supported_models is None and data.metadata:
+        meta = data.metadata.copy() if data.metadata else {}
+        supported_models = meta.pop('supported_models', None) if meta else None
+    else:
+        meta = data.metadata.copy() if data.metadata else {}
 
     db = await get_db()
     await db.execute(
@@ -43,7 +47,7 @@ async def create_source_api(data: SourceAPICreate) -> Dict[str, Any]:
         "supported_models": supported_models or [],
         "is_active": True,
         "created_at": created_at,
-        "metadata": meta
+        "metadata": meta if meta else None
     }
 
 

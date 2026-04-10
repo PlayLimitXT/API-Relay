@@ -6,6 +6,11 @@
     <title>API 中转服务 - 管理控制台</title>
     <link rel="stylesheet" href="/admin/static/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // 版本信息
+        const VERSION = '1.0.0';
+        const COPYRIGHT_YEAR = 2026;
+    </script>
 </head>
 <body>
     <!-- 登录页面 -->
@@ -50,7 +55,7 @@
                         <rect width="32" height="32" rx="8" fill="#4F46E5"/>
                         <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <span>API 中转服务</span>
+                    <span>API 中转服务 <span id="version-badge" class="version-badge">v1.1.0</span></span>
                 </div>
             </div>
             <div class="nav-right">
@@ -200,6 +205,46 @@
                         <div class="stat-card">
                             <span class="stat-label">输入/输出比</span>
                             <span class="stat-value" id="input-output-ratio">0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">平均响应时间</span>
+                            <span class="stat-value" id="avg-response-time-today">--ms</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">活跃IP数</span>
+                            <span class="stat-value" id="active-ips-today">0</span>
+                        </div>
+                    </div>
+
+                    <!-- 实时监控卡片 -->
+                    <div class="realtime-monitor" id="realtime-monitor-section" >
+                        <div class="section-header">
+                            <h3>实时监控</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="refreshRealtimeStats()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <polyline points="23 4 23 10 17 10"/>
+                                    <polyline points="1 20 1 14 7 14"/>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                </svg>
+                                刷新
+                            </button>
+                        </div>
+                        <div class="stats-grid">
+                            <div class="realtime-widget">
+                                <div class="widget-title">最近1分钟请求数</div>
+                                <div class="widget-value" id="requests-last-minute">0</div>
+                                <div class="widget-label">活跃请求</div>
+                            </div>
+                            <div class="realtime-widget realtime-widget-pink">
+                                <div class="widget-title">最近5分钟请求速率</div>
+                                <div class="widget-value" id="requests-per-minute">0</div>
+                                <div class="widget-label">请求/分钟</div>
+                            </div>
+                            <div class="realtime-widget realtime-widget-cyan">
+                                <div class="widget-title">平均响应时间</div>
+                                <div class="widget-value" id="avg-response-recent">--ms</div>
+                                <div class="widget-label">最近5分钟</div>
+                            </div>
                         </div>
                     </div>
 
@@ -626,7 +671,6 @@
                                             <th>输入 Token</th>
                                             <th>输出 Token</th>
                                             <th>错误数</th>
-                                            <th>平均响应</th>
                                         </tr>
                                     </thead>
                                     <tbody id="daily-stats-table"></tbody>
@@ -717,6 +761,75 @@
                                 <button class="btn btn-warning" onclick="cleanupInactiveKeys()">清理禁用密钥</button>
                                 <button class="btn btn-warning" onclick="cleanupOrphanLogs()">清理孤立日志</button>
                             </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <h3>数据库备份与恢复</h3>
+                            <p class="warning-text">定期备份数据以防丢失</p>
+                            <div class="cleanup-buttons">
+                                <button class="btn btn-primary" onclick="backupDatabase()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    创建备份
+                                </button>
+                                <button class="btn btn-secondary" onclick="exportDatabase()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                    导出数据库
+                                </button>
+                                <button class="btn btn-warning" onclick="document.getElementById('import-database-file').click()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    导入数据库
+                                </button>
+                                <input type="file" id="import-database-file" accept=".zip" style="display: none;" onchange="importDatabase(event)">
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <h3>隐私过滤设置</h3>
+                            <form id="privacy-filter-form" class="form-grid">
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="privacy-enabled" onchange="savePrivacySettings()">
+                                        启用隐私过滤
+                                    </label>
+                                    <span class="form-hint">过滤源API返回的敏感信息（如提供商详情、元数据等）</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="filter-metadata" checked onchange="savePrivacySettings()">
+                                        过滤元数据（ID、创建时间等）
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="filter-usage-details" checked onchange="savePrivacySettings()">
+                                        过滤使用详情（仅保留基本token统计）
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="filter-provider-info" checked onchange="savePrivacySettings()">
+                                        过滤提供商信息
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="filter-error-details" onchange="savePrivacySettings()">
+                                        过滤错误详情（使用自定义错误消息）
+                                    </label>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </section>
@@ -962,6 +1075,15 @@
     <!-- 提示消息 -->
     <div id="toast-container"></div>
 
-    <script src="/admin/static/js/app.js?v=12"></script>
+    <!-- 页脚版本信息 -->
+    <footer class="app-footer">
+        <div class="footer-content">
+            <span>API 中转服务 <span id="footer-version">v1.1.0</span></span>
+            <span class="separator">|</span>
+            <span id="copyright-text">Copyright © 2026 PLXT</span>
+        </div>
+    </footer>
+
+    <script src="/admin/static/js/app.js?v=16"></script>
 </body>
 </html>

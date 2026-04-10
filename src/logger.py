@@ -1,11 +1,25 @@
 """日志记录"""
 import logging
 import json
+import asyncio
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
 import aiosqlite
 from .database import get_db
+
+
+# 通用统计更新SQL模板（用于减少重复代码）
+_STATS_UPDATE_SQL = """
+    INSERT INTO {table} ({id_cols}, date, request_count, input_tokens, output_tokens, error_count, avg_response_time_ms)
+    VALUES ({placeholders}1, ?, ?, ?, ?, ?)
+    ON CONFLICT({id_cols}, date) DO UPDATE SET
+        request_count = request_count + 1,
+        input_tokens = input_tokens + excluded.input_tokens,
+        output_tokens = output_tokens + excluded.output_tokens,
+        error_count = error_count + excluded.error_count,
+        avg_response_time_ms = (avg_response_time_ms * request_count + excluded.avg_response_time_ms) / (request_count + 1)
+"""
 
 
 class RequestLogger:
@@ -65,42 +79,124 @@ async def log_request(
     input_tokens: Optional[int],
     output_tokens: Optional[int],
     response_time_ms: int,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    source_id: Optional[str] = None
 ):
     """记录请求到数据库"""
     request_time = datetime.now().isoformat()
     date_str = datetime.now().strftime('%Y-%m-%d')
 
+    # 提取错误类型
+    error_type = None
+    if status_code >= 400:
+        if error_message:
+            # 从错误消息中提取类型
+            error_type = extract_error_type(error_message, status_code)
+        else:
+            error_type = f"http_{status_code}"
+
     db = await get_db()
     await db.execute(
         """
         INSERT INTO request_logs
-        (key_id, request_time, client_ip, model, source_model,
-         status_code, input_tokens, output_tokens, response_time_ms, error_message)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (key_id, request_time, client_ip, model, source_model, source_id,
+         status_code, input_tokens, output_tokens, response_time_ms, error_message, error_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (key_id, request_time, client_ip, model, source_model,
-         status_code, input_tokens, output_tokens, response_time_ms, error_message)
+        (key_id, request_time, client_ip, model, source_model, source_id,
+         status_code, input_tokens, output_tokens, response_time_ms, error_message, error_type)
     )
 
+    # 并行更新所有统计（使用 asyncio.gather）
+    tasks = []
+
     # 更新每日统计（幂等）
-    await update_daily_stats(
+    tasks.append(update_daily_stats(
         db, key_id, date_str,
         input_tokens or 0,
         output_tokens or 0,
-        1 if status_code >= 400 else 0
-    )
+        1 if status_code >= 400 else 0,
+        response_time_ms
+    ))
 
     # 更新实时统计（今日）
-    await update_realtime_stats(
+    tasks.append(update_realtime_stats(
         db, key_id, 'today', date_str,
         input_tokens or 0,
         output_tokens or 0,
         1,
-        1 if status_code >= 400 else 0
-    )
+        1 if status_code >= 400 else 0,
+        response_time_ms
+    ))
+
+    # 更新IP统计
+    if client_ip:
+        tasks.append(update_ip_stats(db, client_ip, request_time, model, key_id))
+
+    # 更新模型统计（按虚拟模型ID）
+    tasks.append(update_model_stats(
+        db, model, date_str,
+        input_tokens or 0,
+        output_tokens or 0,
+        1 if status_code >= 400 else 0,
+        response_time_ms
+    ))
+
+    # 更新源模型统计
+    if source_model:
+        tasks.append(update_source_model_stats(
+            db, source_model, source_id, date_str,
+            input_tokens or 0,
+            output_tokens or 0,
+            1 if status_code >= 400 else 0,
+            response_time_ms
+        ))
+
+    # 更新源提供商统计
+    if source_id:
+        tasks.append(update_source_api_stats(
+            db, source_id, date_str,
+            input_tokens or 0,
+            output_tokens or 0,
+            1 if status_code >= 400 else 0,
+            response_time_ms
+        ))
+
+    # 更新错误统计
+    if error_type and status_code >= 400:
+        tasks.append(update_error_stats(db, error_type, status_code, date_str))
+
+    # 并行执行所有统计更新
+    if tasks:
+        await asyncio.gather(*tasks)
 
     await db.commit()
+
+
+def extract_error_type(error_message: str, status_code: int) -> str:
+    """从错误消息中提取错误类型"""
+    # 常见错误类型关键词
+    error_keywords = {
+        'rate_limit': ['rate limit', 'rate_limit', 'too many requests', '429'],
+        'timeout': ['timeout', 'timed out', '504'],
+        'connection': ['connection', 'network', 'socket', '502'],
+        'auth': ['auth', 'authentication', 'unauthorized', 'invalid api key', '401'],
+        'invalid': ['invalid', 'bad request', '400'],
+        'not_found': ['not found', '404'],
+        'server': ['server error', 'internal error', '500', '503'],
+        'quota': ['quota', 'credits', 'balance', 'insufficient'],
+        'model': ['model not available', 'model not found', 'unsupported model']
+    }
+
+    error_lower = error_message.lower()
+
+    for error_type, keywords in error_keywords.items():
+        for keyword in keywords:
+            if keyword in error_lower:
+                return error_type
+
+    # 默认返回HTTP状态码类型
+    return f"http_{status_code}"
 
 
 async def update_daily_stats(
@@ -109,21 +205,23 @@ async def update_daily_stats(
     date: str,
     input_tokens: int,
     output_tokens: int,
-    errors: int
+    errors: int,
+    response_time_ms: int
 ):
     """更新每日统计数据"""
     await db.execute(
         """
         INSERT INTO statistics (key_id, date, total_requests, total_input_tokens,
-                                total_output_tokens, total_errors)
-        VALUES (?, ?, 1, ?, ?, ?)
+                                total_output_tokens, total_errors, avg_response_time_ms)
+        VALUES (?, ?, 1, ?, ?, ?, ?)
         ON CONFLICT(key_id, date) DO UPDATE SET
             total_requests = total_requests + 1,
             total_input_tokens = total_input_tokens + excluded.total_input_tokens,
             total_output_tokens = total_output_tokens + excluded.total_output_tokens,
-            total_errors = total_errors + excluded.total_errors
+            total_errors = total_errors + excluded.total_errors,
+            avg_response_time_ms = (avg_response_time_ms * total_requests + excluded.avg_response_time_ms) / (total_requests + 1)
         """,
-        (key_id, date, input_tokens, output_tokens, errors)
+        (key_id, date, input_tokens, output_tokens, errors, response_time_ms)
     )
 
 
@@ -135,23 +233,150 @@ async def update_realtime_stats(
     input_tokens: int,
     output_tokens: int,
     request_count: int,
-    error_count: int
+    error_count: int,
+    response_time_ms: int
 ):
-    """更新实时统计数据"""
+    """更新实时统计数据（包含平均响应时间）"""
     now = datetime.now().isoformat()
     await db.execute(
         """
         INSERT INTO realtime_stats (key_id, stat_type, period, input_tokens, output_tokens,
-                                   request_count, error_count, last_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                   request_count, error_count, avg_response_time_ms, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(key_id, stat_type, period) DO UPDATE SET
             input_tokens = realtime_stats.input_tokens + excluded.input_tokens,
             output_tokens = realtime_stats.output_tokens + excluded.output_tokens,
             request_count = realtime_stats.request_count + excluded.request_count,
             error_count = realtime_stats.error_count + excluded.error_count,
+            avg_response_time_ms = (avg_response_time_ms * request_count + excluded.avg_response_time_ms) / (request_count + 1),
             last_updated = excluded.last_updated
         """,
-        (key_id, stat_type, period, input_tokens, output_tokens, request_count, error_count, now)
+        (key_id, stat_type, period, input_tokens, output_tokens, request_count, error_count, response_time_ms, now)
+    )
+
+
+async def update_ip_stats(
+    db: aiosqlite.Connection,
+    client_ip: str,
+    request_time: str,
+    model: str,
+    key_id: Optional[str]
+):
+    """更新IP统计（使用ON CONFLICT避免N+1查询）"""
+    # 使用INSERT...ON CONFLICT合并为单条SQL
+    await db.execute(
+        """
+        INSERT INTO ip_statistics (ip_address, request_count, last_request_time, first_request_time, unique_models, unique_keys)
+        VALUES (?, 1, ?, ?, ?, ?)
+        ON CONFLICT(ip_address) DO UPDATE SET
+            request_count = request_count + 1,
+            last_request_time = excluded.last_request_time,
+            unique_models = CASE
+                WHEN ip_statistics.unique_models IS NULL OR ip_statistics.unique_models = '' THEN excluded.unique_models
+                WHEN excluded.unique_models IS NOT NULL AND excluded.unique_models != '' AND ',' || ip_statistics.unique_models || ',' NOT LIKE '%,' || excluded.unique_models || ',%' THEN ip_statistics.unique_models || ',' || excluded.unique_models
+                ELSE ip_statistics.unique_models
+            END,
+            unique_keys = CASE
+                WHEN ip_statistics.unique_keys IS NULL OR ip_statistics.unique_keys = '' THEN excluded.unique_keys
+                WHEN excluded.unique_keys IS NOT NULL AND excluded.unique_keys != '' AND ',' || ip_statistics.unique_keys || ',' NOT LIKE '%,' || excluded.unique_keys || ',%' THEN ip_statistics.unique_keys || ',' || excluded.unique_keys
+                ELSE ip_statistics.unique_keys
+            END
+        """,
+        (client_ip, request_time, request_time, model, key_id or "")
+    )
+
+
+async def update_model_stats(
+    db: aiosqlite.Connection,
+    model: str,
+    date: str,
+    input_tokens: int,
+    output_tokens: int,
+    error_count: int,
+    response_time_ms: int
+):
+    """更新模型统计（按虚拟模型ID）"""
+    await db.execute(
+        """
+        INSERT INTO model_statistics (model_id, date, request_count, input_tokens, output_tokens, error_count, avg_response_time_ms)
+        VALUES (?, ?, 1, ?, ?, ?, ?)
+        ON CONFLICT(model_id, date) DO UPDATE SET
+            request_count = request_count + 1,
+            input_tokens = input_tokens + excluded.input_tokens,
+            output_tokens = output_tokens + excluded.output_tokens,
+            error_count = error_count + excluded.error_count,
+            avg_response_time_ms = (avg_response_time_ms * request_count + excluded.avg_response_time_ms) / (request_count + 1)
+        """,
+        (model, date, input_tokens, output_tokens, error_count, response_time_ms)
+    )
+
+
+async def update_source_model_stats(
+    db: aiosqlite.Connection,
+    source_model: str,
+    source_id: Optional[str],
+    date: str,
+    input_tokens: int,
+    output_tokens: int,
+    error_count: int,
+    response_time_ms: int
+):
+    """更新源模型统计"""
+    await db.execute(
+        """
+        INSERT INTO source_model_statistics (source_model, source_id, date, request_count, input_tokens, output_tokens, error_count, avg_response_time_ms)
+        VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+        ON CONFLICT(source_model, source_id, date) DO UPDATE SET
+            request_count = request_count + 1,
+            input_tokens = input_tokens + excluded.input_tokens,
+            output_tokens = output_tokens + excluded.output_tokens,
+            error_count = error_count + excluded.error_count,
+            avg_response_time_ms = (avg_response_time_ms * request_count + excluded.avg_response_time_ms) / (request_count + 1)
+        """,
+        (source_model, source_id or "", date, input_tokens, output_tokens, error_count, response_time_ms)
+    )
+
+
+async def update_source_api_stats(
+    db: aiosqlite.Connection,
+    source_id: str,
+    date: str,
+    input_tokens: int,
+    output_tokens: int,
+    error_count: int,
+    response_time_ms: int
+):
+    """更新源提供商统计"""
+    await db.execute(
+        """
+        INSERT INTO source_api_statistics (source_id, date, request_count, input_tokens, output_tokens, error_count, avg_response_time_ms)
+        VALUES (?, ?, 1, ?, ?, ?, ?)
+        ON CONFLICT(source_id, date) DO UPDATE SET
+            request_count = request_count + 1,
+            input_tokens = input_tokens + excluded.input_tokens,
+            output_tokens = output_tokens + excluded.output_tokens,
+            error_count = error_count + excluded.error_count,
+            avg_response_time_ms = (avg_response_time_ms * request_count + excluded.avg_response_time_ms) / (request_count + 1)
+        """,
+        (source_id, date, input_tokens, output_tokens, error_count, response_time_ms)
+    )
+
+
+async def update_error_stats(
+    db: aiosqlite.Connection,
+    error_type: str,
+    status_code: int,
+    date: str
+):
+    """更新错误统计"""
+    await db.execute(
+        """
+        INSERT INTO error_statistics (error_type, status_code, date, error_count)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(error_type, status_code, date) DO UPDATE SET
+            error_count = error_count + 1
+        """,
+        (error_type, status_code, date)
     )
 
 
@@ -272,10 +497,10 @@ async def get_statistics(
     # 总体统计
     query = """
         SELECT
-            COUNT(*) as total_requests,
-            SUM(total_input_tokens) as total_input_tokens,
-            SUM(total_output_tokens) as total_output_tokens,
-            SUM(total_errors) as total_errors
+            COALESCE(SUM(total_requests), 0) as total_requests,
+            COALESCE(SUM(total_input_tokens), 0) as total_input_tokens,
+            COALESCE(SUM(total_output_tokens), 0) as total_output_tokens,
+            COALESCE(SUM(total_errors), 0) as total_errors
         FROM statistics
         WHERE 1=1
     """

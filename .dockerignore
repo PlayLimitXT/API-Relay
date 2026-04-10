@@ -37,13 +37,7 @@ logs/
 .env
 .env.*
 
-# Documentation (keep essential)
-CHANGELOG.md
-CONTRIBUTING.md
-PRODUCTION_CHECKLIST.md
-RELEASE_CHECKLIST.md
-
-# But exclude development notes
+# Documentation (exclude dev notes only)
 *.dev.md
 notes.md
 

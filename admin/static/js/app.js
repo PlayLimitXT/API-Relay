@@ -184,7 +184,27 @@ async function loadDashboard() {
         document.getElementById('output-tokens-today').textContent = formatNumber(dashboard.output_tokens_today);
     }
     if (dashboard.input_output_ratio !== undefined) {
-        document.getElementById('input-output-ratio').textContent = dashboard.input_output_ratio;
+        const ratio = parseFloat(dashboard.input_output_ratio);
+        // 左边固定为输入，右边固定为输出，数值≥1
+        // ratio = output / input，所以 input / output = 1 / ratio
+        // 如果 ratio >= 1 (输出>=输入)，显示为 1:ratio，即 输入:输出
+        // 如果 ratio < 1 (输出<输入)，显示为 (1/ratio):1，即 输入:输出
+        let ratioText;
+        if (ratio >= 1) {
+            ratioText = `1:${ratio.toFixed(3)}`;
+        } else {
+            ratioText = `${(1 / ratio).toFixed(3)}:1`;
+        }
+        document.getElementById('input-output-ratio').textContent = ratioText;
+    }
+
+    // 更新平均响应时间和活跃IP数
+    if (dashboard.avg_response_time_today !== undefined) {
+        document.getElementById('avg-response-time-today').textContent =
+            dashboard.avg_response_time_today ? Math.round(dashboard.avg_response_time_today) + 'ms' : '--ms';
+    }
+    if (dashboard.active_ips_24h !== undefined) {
+        document.getElementById('active-ips-today').textContent = formatNumber(dashboard.active_ips_24h);
     }
 
     // 获取活跃密钥数
@@ -193,6 +213,9 @@ async function loadDashboard() {
         const activeKeys = keysData.keys?.filter(k => k.is_active).length || 0;
         document.getElementById('active-keys').textContent = activeKeys;
     }
+
+    // 加载实时监控数据
+    refreshRealtimeStats();
 
     // 活跃用户排行（使用今日活跃用户）
     const topUsersTable = document.getElementById('top-users-table');
@@ -327,7 +350,7 @@ async function loadKeys() {
             <td>${key.expires_at ? formatDate(key.expires_at) : '<span style="color: var(--text-muted);">永久</span>'}</td>
             <td><span class="font-mono">${key.rate_limit}</span> req/min</td>
             <td>
-                <a href="#" onclick="loadKeyStats('${key.key_id}'); return false;" style="color: var(--primary-color); text-decoration: none;">查看统计</a>
+                <button type="button" class="btn btn-sm" style="padding: 2px 8px; font-size: 12px; color: var(--primary); background: none; border: 1px solid var(--primary);" onclick="showKeyStats('${key.key_id}')">查看统计</button>
             </td>
             <td>
                 <span class="status-badge ${key.is_active ? 'status-active' : 'status-inactive'}">
@@ -1435,11 +1458,10 @@ async function loadStatistics() {
                 <td class="font-mono">${formatNumber(stat.total_input_tokens)}</td>
                 <td class="font-mono">${formatNumber(stat.total_output_tokens)}</td>
                 <td>${formatNumber(stat.total_errors)}</td>
-                <td>--</td>
             </tr>
         `).join('');
     } else {
-        dailyStatsTable.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">暂无数据</td></tr>';
+        dailyStatsTable.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">暂无数据</td></tr>';
     }
 
     // 按用户统计
@@ -1900,4 +1922,146 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statsForm) {
         statsForm.addEventListener('submit', cleanupStats);
     }
+});
+// ========================================
+// 实时监控
+// ========================================
+async function refreshRealtimeStats() {
+    const stats = await apiRequest('realtime-stats');
+    if (!stats) return;
+
+    document.getElementById('requests-last-minute').textContent = stats.active_requests_last_minute || 0;
+    document.getElementById('requests-per-minute').textContent = stats.requests_per_minute_recent || 0;
+    document.getElementById('avg-response-recent').textContent = stats.avg_response_time_last_5_minutes 
+        ? Math.round(stats.avg_response_time_last_5_minutes) + 'ms' 
+        : '--ms';
+}
+
+// ========================================
+// 数据库备份与恢复
+// ========================================
+async function backupDatabase() {
+    try {
+        const result = await apiRequest('database/backup', 'POST');
+        if (result) {
+            showToast(`备份成功！文件：${result.backup_file}`, 'success');
+        }
+    } catch (error) {
+        showToast(`备份失败：${error.message}`, 'error');
+    }
+}
+
+async function exportDatabase() {
+    try {
+        const response = await fetch('/admin/api/database/export', {
+            headers: { 'X-Session-Token': sessionToken }
+        });
+
+        if (!response.ok) {
+            throw new Error('Export failed');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = response.headers.get('content-disposition')?.split('filename=')[1] || 'relay_backup.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        showToast('数据库导出成功', 'success');
+    } catch (error) {
+        showToast(`导出失败：${error.message}`, 'error');
+    }
+}
+
+async function importDatabase(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.zip')) {
+        showToast('请选择.zip格式的备份文件', 'error');
+        return;
+    }
+
+    if (!confirm('⚠️ 警告：导入数据库将覆盖现有数据，此操作不可恢复！\n\n确定要继续吗？')) {
+        event.target.value = '';
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/admin/api/database/import', {
+            method: 'POST',
+            headers: { 'X-Session-Token': sessionToken },
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error('Import failed');
+        }
+
+        const result = await response.json();
+        showToast('数据库导入成功，正在刷新...', 'success');
+        
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+    } catch (error) {
+        showToast(`导入失败：${error.message}`, 'error');
+    } finally {
+        event.target.value = '';
+    }
+}
+
+// ========================================
+// 隐私过滤设置
+// ========================================
+async function loadPrivacySettings() {
+    const config = await apiRequest('config');
+    if (!config || !config.privacy_filter) return;
+
+    const privacy = config.privacy_filter;
+    document.getElementById('privacy-enabled').checked = privacy.enabled || false;
+    document.getElementById('filter-metadata').checked = privacy.filter_metadata !== false;
+    document.getElementById('filter-usage-details').checked = privacy.filter_usage_details !== false;
+    document.getElementById('filter-provider-info').checked = privacy.filter_provider_info !== false;
+    document.getElementById('filter-error-details').checked = privacy.filter_error_details || false;
+}
+
+async function savePrivacySettings() {
+    const privacyFilter = {
+        enabled: document.getElementById('privacy-enabled').checked,
+        filter_metadata: document.getElementById('filter-metadata').checked,
+        filter_usage_details: document.getElementById('filter-usage-details').checked,
+        filter_provider_info: document.getElementById('filter-provider-info').checked,
+        filter_error_details: document.getElementById('filter-error-details').checked
+    };
+
+    const result = await apiRequest('config', 'POST', {
+        privacy_filter: privacyFilter
+    });
+
+    if (result) {
+        showToast('隐私过滤设置已保存', 'success');
+    }
+}
+
+// ========================================
+// 初始化
+// ========================================
+// 定时刷新实时监控
+setInterval(() => {
+    if (currentPage === 'dashboard') {
+        refreshRealtimeStats();
+    }
+}, 30000); // 每30秒刷新一次
+
+// 加载隐私设置
+document.addEventListener('DOMContentLoaded', () => {
+    loadPrivacySettings();
 });

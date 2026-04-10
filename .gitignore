@@ -19,14 +19,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
 
 # IDE
 .vscode/
@@ -36,27 +33,31 @@ venv.bak/
 *~
 .DS_Store
 
-# Database
-database/
-*.db
-*.sqlite
-*.sqlite3
+# Database (runtime files only)
+database/*.shm
+database/*.wal
+database/*.db
 
 # Logs
 logs/
 *.log
 
-# Environment Variables
+# Environment Variables (exclude templates)
 .env
 .env.local
 .env.*.local
-.env.production
+!.env.example
+!.env.production
 
 # Secrets (never commit real config)
 config.json
 config.json.bak
+config.json.tmp
 *.pem
 *.key
+
+# Temporary files
+*.tmp
 
 # OS
 Thumbs.db
@@ -67,15 +68,8 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
-.venv/
 
 # MyPy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Temporary files
-*.tmp
-*.bak
-*.backup
-.DS_Store
