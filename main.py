@@ -31,10 +31,19 @@ def _load_env_file(env_path: Path):
     except Exception:
         pass  # Ignore errors in .env file
 
+def _build_models_url(base_url: str) -> str:
+    """构建 /models URL（避免重复路径）"""
+    url = base_url.rstrip('/')
+    if '/chat' in url:
+        url = url.replace('/chat/completions', '/models').replace('/chat', '/models')
+    if not url.endswith('/models'):
+        url = url.rstrip('/') + '/models'
+    return url
+
 _env_file = Path(__file__).parent / ".env"
 _load_env_file(_env_file)
 
-from src.database import init_database, get_db
+from src.database import init_database, get_db, DATABASE_PATH
 from src.models import (
     AdminLogin, APIKeyCreate, APIKeyResponse, APIKeyInfo,
     ChatCompletionRequest, ConfigUpdate
@@ -97,7 +106,7 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 config = _load_config()
 
 # 创建FastAPI应用
-app = FastAPI(title="API Relay Service", version="1.1.0")
+app = FastAPI(title="API Relay Service", version="1.2.0")
 
 # CORS配置
 app.add_middleware(
@@ -112,12 +121,33 @@ app.add_middleware(
 proxy = APIProxy(config)
 logger = RequestLogger(config)
 
-# 管理员会话存储（简化版，生产环境应使用Redis）
-admin_sessions = {}
+# 管理员会话存储（使用持久化文件存储，重启后恢复）
+ADMIN_SESSIONS_FILE = Path(__file__).parent / "database" / "admin_sessions.json"
+
+def _load_admin_sessions():
+    """从文件加载管理员会话"""
+    try:
+        if ADMIN_SESSIONS_FILE.exists():
+            with open(ADMIN_SESSIONS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_admin_sessions():
+    """保存管理员会话到文件"""
+    try:
+        ADMIN_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(ADMIN_SESSIONS_FILE, 'w') as f:
+            json.dump(admin_sessions, f, default=str)
+    except Exception as e:
+        logger.log_error(f"Failed to save sessions: {e}")
+
+admin_sessions = _load_admin_sessions()
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """限流中间件"""
+    """限流中间件 - 支持全局和单密钥限流"""
 
     async def dispatch(self, request: Request, call_next):
         # 只对API请求限流，不对管理面板限流
@@ -138,18 +168,45 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     )
 
                     if not is_allowed:
+                        # 获取自定义429消息
+                        key_429_message = rate_limit_config.get('key_429_message', 'Rate limit exceeded')
                         return JSONResponse(
                             status_code=429,
                             content={
                                 "error": {
-                                    "message": "Rate limit exceeded",
-                                    "type": "rate_limit_error"
+                                    "message": key_429_message,
+                                    "type": "rate_limit_error",
+                                    "code": 429
                                 }
                             },
                             headers={
                                 "X-RateLimit-Limit": str(max_requests),
                                 "X-RateLimit-Remaining": "0",
                                 "X-RateLimit-Reset": str(reset_time)
+                            }
+                        )
+
+                    # 检查全局限流
+                    global_max = rate_limit_config.get('global_rpm', 10000)
+                    global_is_allowed, global_remaining, global_reset_time = rate_limiter.is_allowed(
+                        'global', global_max
+                    )
+
+                    if not global_is_allowed:
+                        global_429_message = rate_limit_config.get('global_429_message', 'Service is temporarily busy')
+                        return JSONResponse(
+                            status_code=429,
+                            content={
+                                "error": {
+                                    "message": global_429_message,
+                                    "type": "rate_limit_error",
+                                    "code": 429
+                                }
+                            },
+                            headers={
+                                "X-RateLimit-Limit": str(global_max),
+                                "X-RateLimit-Remaining": "0",
+                                "X-RateLimit-Reset": str(global_reset_time)
                             }
                         )
 
@@ -388,6 +445,125 @@ async def get_source_api(source_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Source API not found")
     return result
 
+@app.get("/admin/api/source-apis/{source_id}/models")
+async def fetch_source_api_models(source_id: str, request: Request):
+    """从源API获取可用模型列表（用于勾选添加）"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.model_manager import get_source_api
+    import httpx
+
+    source = await get_source_api(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source API not found")
+
+    base_url = source.get('base_url', '')
+    api_key = source.get('api_key', '')
+
+    if not base_url or not api_key:
+        return {"success": False, "models": [], "message": "Base URL or API Key not configured"}
+
+    # 构建 /models URL
+    models_url = _build_models_url(base_url)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                models_url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                model_list = []
+                if isinstance(data, dict) and 'data' in data:
+                    for model in data['data']:
+                        model_id = model.get('id', '')
+                        if model_id:
+                            model_list.append({
+                                "id": model_id,
+                                "owned_by": model.get('owned_by', ''),
+                                "name": model.get('name', model_id)
+                            })
+                # 获取当前已配置的模型列表
+                existing_models = source.get('supported_models', []) or []
+                return {
+                    "success": True,
+                    "models": model_list,
+                    "existing_models": existing_models,
+                    "model_count": len(model_list)
+                }
+            else:
+                return {
+                    "success": False,
+                    "models": [],
+                    "message": f"Failed to fetch models, HTTP {response.status_code}"
+                }
+    except httpx.TimeoutException:
+        return {"success": False, "models": [], "message": "Connection timeout"}
+    except httpx.RequestError as e:
+        return {"success": False, "models": [], "message": f"Connection error: {str(e)}"}
+
+
+@app.post("/admin/api/source-apis/{source_id}/test")
+async def test_source_api(source_id: str, request: Request):
+    """测试源API连接是否正常"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from src.model_manager import get_source_api
+    import httpx
+
+    source = await get_source_api(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source API not found")
+
+    base_url = source.get('base_url', '')
+    api_key = source.get('api_key', '')
+
+    if not base_url or not api_key:
+        return {"success": False, "message": "Base URL 或 API Key 未配置"}
+
+    # 构建测试 URL（使用 /models 端点作为轻量测试）
+    test_url = _build_models_url(base_url)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                test_url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                model_count = len(data.get('data', [])) if isinstance(data, dict) else 0
+                return {
+                    "success": True,
+                    "message": f"连接成功！可用模型数: {model_count}",
+                    "status_code": response.status_code,
+                    "model_count": model_count
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"连接失败，HTTP {response.status_code}: {response.text[:200]}",
+                    "status_code": response.status_code
+                }
+    except httpx.TimeoutException:
+        return {"success": False, "message": "连接超时，请检查网络和 Base URL"}
+    except httpx.RequestError as e:
+        return {"success": False, "message": f"连接错误: {str(e)}"}
+
+
 
 @app.patch("/admin/api/source-apis/{source_id}")
 async def update_source_api(source_id: str, request: Request):
@@ -589,18 +765,19 @@ EMBEDDINGS_ENDPOINT = "/embeddings"
 def verify_admin_session_or_raise(request: Request):
     """验证管理员会话，未通过则抛出 HTTPException"""
     session_token = request.headers.get(SESSION_TOKEN_HEADER, "")
-    if session_token not in admin_sessions:
+    if not session_token or session_token not in admin_sessions:
         raise HTTPException(status_code=401, detail="Unauthorized")
     session = admin_sessions[session_token]
-    if datetime.now() >= session['expires_at']:
+    expires_at = datetime.fromisoformat(session['expires_at'])
+    if datetime.now() >= expires_at:
         del admin_sessions[session_token]
+        _save_admin_sessions()
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def verify_admin_session(session_token: str) -> bool:
     """验证管理员会话（兼容性包装）"""
     try:
-        # 构造伪Request来复用验证逻辑
         class FakeRequest:
             def __init__(self, token):
                 self.headers = {"X-Session-Token": token}
@@ -610,19 +787,36 @@ def verify_admin_session(session_token: str) -> bool:
         return False
 
 
+@app.post("/admin/api/logout")
+async def admin_logout(request: Request):
+    """管理员登出"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if session_token and session_token in admin_sessions:
+        del admin_sessions[session_token]
+        _save_admin_sessions()
+    return {"message": "Logged out"}
+
+
 @app.post("/admin/api/login")
 async def admin_login(login_data: AdminLogin):
     """管理员登录"""
     if login_data.password != config['admin_password']:
         raise HTTPException(status_code=401, detail="Invalid password")
 
-    # 创建会话
+    # 清理过期会话
+    now = datetime.now()
+    expired_keys = [k for k, v in admin_sessions.items() if now >= datetime.fromisoformat(v['expires_at'])]
+    for k in expired_keys:
+        del admin_sessions[k]
+
+    # 创建新会话
     import secrets
     session_token = secrets.token_urlsafe(32)
     admin_sessions[session_token] = {
-        'created_at': datetime.now(),
-        'expires_at': datetime.now() + timedelta(hours=24)
+        'created_at': datetime.now().isoformat(),
+        'expires_at': (now + timedelta(hours=24)).isoformat()
     }
+    _save_admin_sessions()
 
     return {"session_token": session_token}
 
@@ -740,9 +934,7 @@ async def admin_get_key(request: Request, key_id: str):
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    keys = await list_api_keys()
-    key = next((k for k in keys if k['key_id'] == key_id), None)
-
+    key = await get_api_key(key_id)
     if not key:
         raise HTTPException(status_code=404, detail="Key not found")
 
@@ -763,15 +955,68 @@ async def admin_get_logs(
     key_id: Optional[str] = None,
     model: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    status_code: Optional[int] = None
 ):
     """获取请求日志"""
     session_token = request.headers.get("X-Session-Token", "")
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    logs = await get_request_logs(limit, offset, key_id, model, start_date, end_date)
+    logs = await get_request_logs(limit, offset, key_id, model, start_date, end_date, status_code)
     return {"logs": logs}
+
+
+@app.get("/admin/api/logs/export")
+async def export_logs(
+    request: Request,
+    key_id: Optional[str] = None,
+    model: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status_code: Optional[int] = None
+):
+    """导出请求日志为 CSV 格式"""
+    session_token = request.headers.get("X-Session-Token", "")
+    if not verify_admin_session(session_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import io
+    import csv
+    from fastapi.responses import StreamingResponse
+
+    # 获取所有符合条件的日志（不限数量）
+    logs = await get_request_logs(100000, 0, key_id, model, start_date, end_date, status_code)
+
+    # 生成 CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['request_time', 'client_ip', 'key_id', 'model', 'source_model',
+                      'status_code', 'input_tokens', 'output_tokens', 'response_time_ms',
+                      'error_message', 'error_type'])
+
+    for log in logs:
+        writer.writerow([
+            log.get('request_time', ''),
+            log.get('client_ip', ''),
+            log.get('key_id', ''),
+            log.get('model', ''),
+            log.get('source_model', ''),
+            log.get('status_code', ''),
+            log.get('input_tokens', 0),
+            log.get('output_tokens', 0),
+            log.get('response_time_ms', ''),
+            log.get('error_message', ''),
+            log.get('error_type', '')
+        ])
+
+    output.seek(0)
+
+    return StreamingResponse(
+        iter([output.getvalue().encode('utf-8-sig')]),  # UTF-8 with BOM for Excel
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=request_logs.csv"}
+    )
 
 
 @app.post("/admin/api/logs/clear")
@@ -849,15 +1094,16 @@ async def admin_cleanup_inactive_keys(request: Request):
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    from src.auth import list_api_keys, delete_api_key
+    from src.database import get_db
+    import aiosqlite
 
-    keys = await list_api_keys()
-    inactive_keys = [k for k in keys if not k['is_active']]
-    deleted_count = 0
-
-    for key in inactive_keys:
-        if await delete_api_key(key['key_id']):
-            deleted_count += 1
+    # 直接批量删除禁用的密钥，避免N+1问题
+    db = await get_db()
+    cursor = await db.execute(
+        "DELETE FROM api_keys WHERE is_active = 0"
+    )
+    deleted_count = cursor.rowcount
+    await db.commit()
 
     logger.log_info(f"清理禁用密钥: 删除了 {deleted_count} 个密钥")
     return {"message": f"清理完成，删除了 {deleted_count} 个禁用密钥", "deleted_count": deleted_count}
@@ -871,25 +1117,26 @@ async def admin_cleanup_orphan_logs(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     from src.auth import list_api_keys
+    from src.database import get_db
 
     keys = await list_api_keys()
-    valid_key_ids = set(k['key_id'] for k in keys)
+    valid_key_ids = [k['key_id'] for k in keys]
 
     db = await get_db()
     try:
-        # 获取所有不同的key_id
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT DISTINCT key_id FROM request_logs WHERE key_id IS NOT NULL")
-        rows = await cursor.fetchall()
-        orphan_count = 0
+        # 使用 NOT IN 子查询一次性删除所有孤立日志
+        query = """
+        DELETE FROM request_logs
+        WHERE key_id IS NOT NULL
+        AND key_id NOT IN ({})
+        """
+        placeholders = ','.join(['?'] * len(valid_key_ids))
+        final_query = query.format(placeholders) if valid_key_ids else "DELETE FROM request_logs WHERE key_id IS NOT NULL"
 
-        for row in rows:
-            if row['key_id'] not in valid_key_ids:
-                # 删除孤立日志
-                del_cursor = await db.execute("DELETE FROM request_logs WHERE key_id = ?", (row['key_id'],))
-                orphan_count += del_cursor.rowcount
-
+        cursor = await db.execute(final_query, valid_key_ids)
+        orphan_count = cursor.rowcount
         await db.commit()
+
         logger.log_info(f"清理孤立日志: 删除了 {orphan_count} 条记录")
         return {"message": f"清理完成，删除了 {orphan_count} 条孤立日志", "deleted_count": orphan_count}
     finally:
@@ -957,14 +1204,53 @@ async def admin_trend_stats(
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    dashboard = await get_dashboard_stats()
+    db = await get_db()
+    db.row_factory = aiosqlite.Row
+
+    # 获取最近24小时的趋势
+    cursor = await db.execute("""
+        SELECT strftime('%H', request_time) as hour, COUNT(*) as requests, AVG(response_time_ms) as avg_response_time, SUM(input_tokens + output_tokens) as tokens
+        FROM request_logs
+        WHERE datetime(request_time) >= datetime('now', '-24 hours')
+        GROUP BY hour
+        ORDER BY hour
+    """)
+    hourly_trend = await cursor.fetchall()
+
+    # 获取最近7天的趋势
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    cursor = await db.execute("""
+        SELECT date, SUM(total_requests) as requests, SUM(total_input_tokens + total_output_tokens) as tokens, SUM(total_errors) as errors, AVG(avg_response_time_ms) as avg_response_time
+        FROM statistics
+        WHERE date >= ?
+        GROUP BY date
+        ORDER BY date
+    """, (seven_days_ago,))
+    daily_trend = await cursor.fetchall()
+
+    # 获取其他指标
+    cursor = await db.execute("""
+        SELECT COUNT(DISTINCT client_ip) as active_ips
+        FROM request_logs
+        WHERE datetime(request_time) >= datetime('now', '-24 hours') AND client_ip IS NOT NULL
+    """)
+    result = await cursor.fetchone()
+    active_ips_24h = result[0] or 0 if result else 0
+
+    cursor = await db.execute("""
+        SELECT AVG(avg_response_time_ms) as avg_response_time_today
+        FROM statistics
+        WHERE date = ?
+    """, (datetime.now().strftime('%Y-%m-%d'),))
+    result = await cursor.fetchone()
+    avg_response_time_today = round(result[0] or 0, 2) if result else 0
 
     return {
         "period": period,
-        "hourly_trend": dashboard.get('hourly_trend', []),
-        "daily_trend": dashboard.get('daily_trend', []),
-        "avg_response_time_today": dashboard.get('avg_response_time_today', 0),
-        "active_ips_24h": dashboard.get('active_ips_24h', 0)
+        "hourly_trend": [dict(row) for row in hourly_trend],
+        "daily_trend": [dict(row) for row in daily_trend],
+        "avg_response_time_today": avg_response_time_today,
+        "active_ips_24h": active_ips_24h
     }
 
 
@@ -1181,22 +1467,24 @@ async def admin_realtime_stats(request: Request):
 
 @app.get("/admin/api/database/export")
 async def export_database(request: Request):
-    """导出数据库"""
+    """导出数据库 - 使用 JSON 格式保留所有数据"""
     session_token = request.headers.get("X-Session-Token", "")
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     import io
     import zipfile
+    import json as json_module
     from fastapi.responses import StreamingResponse
 
     db = await get_db()
+    db.row_factory = aiosqlite.Row
 
     # 创建内存中的zip文件
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # 导出各个表
+        # 导出各个表 - 使用 JSON 格式而非 CSV，避免数据丢失
         tables = [
             'api_keys', 'source_apis', 'virtual_models', 'model_bindings',
             'request_logs', 'statistics', 'realtime_stats',
@@ -1204,25 +1492,46 @@ async def export_database(request: Request):
             'source_api_statistics', 'error_statistics', 'concurrent_monitor'
         ]
 
+        # 创建元数据文件，包含数据库版本和导出时间
+        metadata = {
+            "version": "2.0",
+            "export_time": datetime.now().isoformat(),
+            "tables": {}
+        }
+
         for table in tables:
-            cursor = await db.execute(f"SELECT * FROM {table}")
-            rows = await cursor.fetchall()
+            try:
+                cursor = await db.execute(f"SELECT * FROM {table}")
+                rows = await cursor.fetchall()
 
-            # 获取列名
-            cursor = await db.execute(f"PRAGMA table_info({table})")
-            columns = [col[1] for col in await cursor.fetchall()]
+                # 获取列名
+                cursor = await db.execute(f"PRAGMA table_info({table})")
+                columns = [col[1] for col in await cursor.fetchall()]
 
-            # 转换为CSV格式
-            csv_data = ','.join(columns) + '\n'
-            for row in rows:
-                csv_data += ','.join([str(val) if val is not None else '' for val in row]) + '\n'
+                # 转换为 JSON 格式
+                rows_data = []
+                for row in rows:
+                    row_dict = {}
+                    for i, col in enumerate(columns):
+                        val = row[i]
+                        # 处理 None 值
+                        row_dict[col] = val
+                    rows_data.append(row_dict)
 
-            zip_file.writestr(f"{table}.csv", csv_data)
+                metadata["tables"][table] = {
+                    "columns": columns,
+                    "rows": rows_data
+                }
+            except Exception as e:
+                logger.log_warning(f"导出表 {table} 时出错: {e}")
+                metadata["tables"][table] = {"columns": [], "rows": []}
+
+        # 写入主数据文件
+        zip_file.writestr("data.json", json_module.dumps(metadata, ensure_ascii=False, indent=2))
 
     zip_buffer.seek(0)
 
     # 返回文件
-    from datetime import datetime
     filename = f"relay_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
 
     return StreamingResponse(
@@ -1234,7 +1543,7 @@ async def export_database(request: Request):
 
 @app.post("/admin/api/database/import")
 async def import_database(request: Request):
-    """导入数据库"""
+    """导入数据库 - 支持新版 JSON 格式和旧版 CSV 格式，兼容旧版本数据"""
     session_token = request.headers.get("X-Session-Token", "")
     if not verify_admin_session(session_token):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -1242,6 +1551,7 @@ async def import_database(request: Request):
     import zipfile
     import tempfile
     import os
+    import json as json_module
 
     # 获取上传的文件
     form = await request.form()
@@ -1260,35 +1570,123 @@ async def import_database(request: Request):
         db = await get_db()
 
         with zipfile.ZipFile(tmp_path, 'r') as zip_file:
-            # 读取并导入各个表
-            for file_info in zip_file.filelist:
-                if file_info.filename.endswith('.csv'):
-                    table_name = file_info.filename[:-4]  # 去掉.csv后缀
+            # 先禁用外键约束（导入期间）
+            await db.execute("PRAGMA foreign_keys=OFF")
 
-                    # 读取CSV数据
-                    with zip_file.open(file_info.filename) as csv_file:
-                        content = csv_file.read().decode('utf-8')
-                        lines = content.strip().split('\n')
+            # 检查是否有新版 JSON 格式数据
+            if 'data.json' in [f.filename for f in zip_file.filelist]:
+                # 新版 JSON 格式导入
+                with zip_file.open('data.json') as data_file:
+                    data_content = data_file.read().decode('utf-8')
+                    metadata = json_module.loads(data_content)
 
-                        if len(lines) < 2:
-                            continue
+                tables_data = metadata.get('tables', {})
 
-                        columns = lines[0].split(',')
-                        values_list = []
-                        for line in lines[1:]:
-                            values = line.split(',')
-                            values_list.append(values)
+                # 定义表依赖顺序（外键依赖关系）
+                table_order = [
+                    'source_apis', 'virtual_models',  # 这些无外键依赖
+                    'api_keys',  # 无外键依赖
+                    'model_bindings',  # 依赖 source_apis 和 virtual_models
+                    'request_logs', 'statistics', 'realtime_stats',
+                    'ip_statistics', 'model_statistics', 'source_model_statistics',
+                    'source_api_statistics', 'error_statistics', 'concurrent_monitor'
+                ]
 
-                        # 清空目标表
+                # 获取数据库中现有的所有表
+                cursor = await db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")
+                existing_tables = set(row[0] for row in await cursor.fetchall())
+
+                for table_name in table_order:
+                    if table_name not in tables_data:
+                        # 如果是旧版本备份，可能缺少某些新表，跳过
+                        logger.log_warning(f"备份中缺少表 {table_name}，跳过（兼容旧版本数据）")
+                        continue
+
+                    table_info = tables_data[table_name]
+                    rows = table_info.get('rows', [])
+
+                    if not rows:
+                        continue
+
+                    # 如果表存在于当前数据库，先清空
+                    if table_name in existing_tables:
                         await db.execute(f"DELETE FROM {table_name}")
 
-                        # 插入数据
-                        if values_list:
-                            placeholders = ','.join(['?' for _ in columns])
-                            insert_sql = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
+                    # 插入数据
+                    if rows:
+                        # 获取列名
+                        columns = list(rows[0].keys())
+                        placeholders = ','.join(['?' for _ in columns])
+                        insert_sql = f"INSERT OR REPLACE INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
 
-                            for values in values_list:
+                        for row_data in rows:
+                            try:
+                                values = [row_data.get(col) for col in columns]
                                 await db.execute(insert_sql, values)
+                            except Exception as insert_error:
+                                logger.log_warning(f"跳过插入失败的记录 ({table_name}): {insert_error}")
+            else:
+                # 旧版 CSV 格式导入（向后兼容）
+                for file_info in zip_file.filelist:
+                    if file_info.filename.endswith('.csv'):
+                        table_name = file_info.filename[:-4]  # 去掉.csv后缀
+
+                        # 检查表是否存在
+                        cursor = await db.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                            (table_name,)
+                        )
+                        if not await cursor.fetchone():
+                            logger.log_warning(f"表 {table_name} 不存在，跳过导入")
+                            continue
+
+                        # 读取CSV数据
+                        with zip_file.open(file_info.filename) as csv_file:
+                            content = csv_file.read().decode('utf-8')
+                            lines = content.strip().split('\n')
+
+                            if len(lines) < 2:
+                                continue
+
+                            columns = lines[0].split(',')
+                            values_list = []
+                            for line in lines[1:]:
+                                # 简单的 CSV 解析：处理空值和包含逗号的数据
+                                values = []
+                                current = ''
+                                in_quotes = False
+                                for char in line:
+                                    if char == '"':
+                                        in_quotes = not in_quotes
+                                    elif char == ',' and not in_quotes:
+                                        values.append(current.strip().strip('"') if current.strip() else None)
+                                        current = ''
+                                    else:
+                                        current += char
+                                values.append(current.strip().strip('"') if current.strip() else None)
+
+                                # 确保 values 数量与 columns 一致
+                                if len(values) == len(columns):
+                                    values_list.append(values)
+
+                            # 清空目标表
+                            await db.execute(f"DELETE FROM {table_name}")
+
+                            # 插入数据
+                            if values_list:
+                                placeholders = ','.join(['?' for _ in columns])
+                                insert_sql = f"INSERT OR REPLACE INTO {table_name} ({','.join(columns)}) VALUES ({placeholders})"
+
+                                for values in values_list:
+                                    try:
+                                        await db.execute(insert_sql, values)
+                                    except Exception as insert_error:
+                                        # 跳过单条插入失败的记录
+                                        logger.log_warning(f"跳过插入失败的记录 ({table_name}): {insert_error}")
+
+        # 重新启用外键约束
+        await db.execute("PRAGMA foreign_keys=ON")
 
         await db.commit()
         logger.log_info("Database imported successfully")
@@ -1311,21 +1709,31 @@ async def backup_database(request: Request):
     import shutil
     from datetime import datetime
 
-    # 备份数据库文件
-    backup_dir = DATABASE_PATH.parent / "backups"
-    backup_dir.mkdir(exist_ok=True)
+    try:
+        # 检查数据库文件是否存在
+        if not DATABASE_PATH.exists():
+            raise HTTPException(status_code=404, detail="Database file not found")
 
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_path = backup_dir / f"relay_{timestamp}.db"
+        # 备份数据库文件
+        backup_dir = DATABASE_PATH.parent / "backups"
+        backup_dir.mkdir(exist_ok=True)
 
-    shutil.copy2(DATABASE_PATH, backup_path)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_path = backup_dir / f"relay_{timestamp}.db"
 
-    logger.log_info(f"Database backed up to {backup_path}")
-    return {
-        "message": "Database backed up successfully",
-        "backup_file": str(backup_path),
-        "timestamp": timestamp
-    }
+        shutil.copy2(DATABASE_PATH, backup_path)
+
+        logger.log_info(f"Database backed up to {backup_path}")
+        return {
+            "message": "Database backed up successfully",
+            "backup_file": str(backup_path),
+            "timestamp": timestamp
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_error(f"Database backup failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
 
 # ==================== 管理面板静态文件 ====================
@@ -1337,6 +1745,17 @@ app.mount("/admin/static", StaticFiles(directory="admin/static"), name="admin_st
 async def health_check():
     """健康检查端点"""
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/admin/api/server-time")
+async def server_time():
+    """获取服务器本地时间"""
+    now = datetime.now()
+    return {
+        "server_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "server_timestamp": int(now.timestamp()),
+        "timezone": time.strftime("%Z", time.localtime())
+    }
 
 
 @app.get("/admin/login")
@@ -1359,15 +1778,25 @@ async def admin_panel():
 async def startup_event():
     """启动时初始化"""
     await init_database()
+    # 清理过期会话
+    now = datetime.now()
+    expired = [k for k, v in admin_sessions.items()
+               if now >= datetime.fromisoformat(v['expires_at'])]
+    for k in expired:
+        del admin_sessions[k]
+    if expired:
+        _save_admin_sessions()
     logger.log_info(f"API Relay Service started on port {config['server']['port']}")
     logger.log_info(f"Available models: {list(proxy.models_config.keys())}")
+    logger.log_info(f"Restored {len(admin_sessions)} active admin sessions")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """关闭时清理数据库连接"""
+    """关闭时保存会话并清理"""
     from src.database import close_db
     await close_db()
+    _save_admin_sessions()
     logger.log_info("API Relay Service shut down")
 
 

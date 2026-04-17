@@ -142,6 +142,45 @@ async def list_api_keys() -> list:
     return result
 
 
+async def get_api_key(key_id: str) -> Optional[Dict[str, Any]]:
+    """获取单个 API 密钥（返回明文密钥，支持管理员查看和复制）"""
+    import json
+
+    db = await get_db()
+    db.row_factory = aiosqlite.Row
+    cursor = await db.execute(
+        """
+        SELECT key_id, api_key_hash, name, created_at, expires_at, is_active, rate_limit, metadata
+        FROM api_keys
+        WHERE key_id = ?
+        """,
+        (key_id,)
+    )
+    row = await cursor.fetchone()
+
+    if not row:
+        return None
+
+    key_encoded = row['api_key_hash']
+    # 尝试解码 Base64 获取明文密钥
+    try:
+        api_key = decode_api_key(key_encoded)
+    except Exception:
+        # 如果解码失败，可能是旧格式或损坏的数据
+        api_key = f"sk-invalid-{row['key_id'][:8]}"
+
+    return {
+        "key_id": row['key_id'],
+        "name": row['name'],
+        "created_at": row['created_at'],
+        "expires_at": row['expires_at'],
+        "is_active": bool(row['is_active']),
+        "rate_limit": row['rate_limit'],
+        "api_key": api_key,  # 返回明文密钥
+        "metadata": json.loads(row['metadata']) if row['metadata'] else None
+    }
+
+
 async def revoke_api_key(key_id: str) -> bool:
     """禁用 API 密钥"""
     db = await get_db()

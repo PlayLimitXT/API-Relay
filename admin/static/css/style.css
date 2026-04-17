@@ -85,6 +85,165 @@ body {
 
 .nav-right { display: flex; align-items: center; gap: 16px; }
 
+.local-time {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: 'Inter', monospace;
+    white-space: nowrap;
+    padding: 4px 10px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+}
+
+/* Language Selector */
+.lang-selector {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.lang-selector .btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 6px 10px;
+    white-space: nowrap;
+}
+
+.lang-selector .btn svg {
+    flex-shrink: 0;
+}
+
+.lang-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    min-width: 160px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.lang-option {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    transition: background 0.15s;
+}
+
+.lang-option:hover {
+    background: var(--bg-secondary);
+}
+
+.lang-option.active {
+    background: var(--primary);
+    color: white;
+}
+
+/* Server Time Card (in dashboard header) */
+.server-time-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    padding: 4px 12px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.server-time-sync {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.sync-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--danger);
+    transition: background 0.3s;
+}
+
+.sync-dot.synced {
+    background: var(--success);
+    box-shadow: 0 0 4px var(--success);
+}
+
+.server-time-value {
+    font-family: 'Inter', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .lang-dropdown {
+        right: 0;
+        left: auto;
+    }
+
+    .lang-selector .btn {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+
+    .lang-selector .btn #lang-current-label {
+        display: none;
+    }
+
+    .server-time-card {
+        padding: 3px 8px;
+    }
+
+    .server-time-value {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    .server-time-card {
+        padding: 3px 6px;
+        gap: 1px;
+    }
+
+    .server-time-sync {
+        font-size: 10px;
+    }
+
+    .server-time-value {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .server-time-card {
+        display: none;
+    }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
 .server-status {
     display: flex;
     align-items: center;
@@ -188,6 +347,34 @@ body {
 }
 
 .header-actions { display: flex; gap: 12px; }
+
+/* Dashboard header right side */
+.dashboard-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.dashboard-header-right .server-time-card {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    padding: 3px 10px;
+    min-width: 0;
+}
+
+.dashboard-header-right .server-time-value {
+    font-size: 12px;
+}
+
+.dashboard-header-right .server-time-sync {
+    font-size: 10px;
+}
+
+/* Server Time Card (in dashboard header) */
 
 /* ========================================
    CARDS & STATS

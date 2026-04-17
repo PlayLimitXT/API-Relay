@@ -37,10 +37,16 @@ ENV/
 database/*.shm
 database/*.wal
 database/*.db
+database/admin_sessions.json
+database/backups/*.db
 
 # Logs
-logs/
+logs/*.log
 *.log
+
+# Runtime
+relay.pid
+*.pid
 
 # Environment Variables (exclude templates)
 .env

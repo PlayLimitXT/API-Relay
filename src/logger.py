@@ -452,7 +452,8 @@ async def get_request_logs(
     key_id: Optional[str] = None,
     model: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    status_code: Optional[int] = None
 ) -> list:
     """查询请求日志"""
     db = await get_db()
@@ -476,6 +477,10 @@ async def get_request_logs(
     if end_date:
         query += " AND request_time <= ?"
         params.append(end_date)
+
+    if status_code is not None:
+        query += " AND status_code = ?"
+        params.append(status_code)
 
     query += " ORDER BY request_time DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])

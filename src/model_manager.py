@@ -416,7 +416,7 @@ async def list_available_models_with_bindings() -> List[Dict[str, Any]]:
             "id": row['model_id'],
             "name": row['name'],
             "description": row['description'],
-            "sources": row['sources'] if row['sources'] else "未绑定",
+            "sources": row['sources'] if row['sources'] else "Unbound",
             "object": "model",
             "created": int(datetime.now().timestamp())
         })

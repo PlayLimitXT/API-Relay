@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API 中转服务 - 管理控制台</title>
+    <title>API Relay Service - Admin Console</title>
     <link rel="stylesheet" href="/admin/static/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
         // 版本信息
-        const VERSION = '1.0.0';
+        const VERSION = '1.2.0';
         const COPYRIGHT_YEAR = 2026;
     </script>
 </head>
@@ -22,16 +22,16 @@
                     <path d="M14 24L20 30L34 16" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </div>
-            <h1>API 中转服务</h1>
-            <p class="login-subtitle">管理控制台</p>
+            <h1>API Relay Service</h1>
+            <p class="login-subtitle" data-i18n="dashboard">管理控制台</p>
             <form id="login-form">
                 <div class="form-group">
-                    <label for="password">管理员密码</label>
-                    <input type="password" id="password" placeholder="请输入密码" required>
+                    <label for="password" data-i18n="admin_password">管理员密码</label>
+                    <input type="password" id="password" data-i18n-placeholder="input_password" placeholder="请输入密码" required>
                 </div>
                 <button type="submit" class="btn btn-primary btn-block">
-                    <span class="btn-text">登录</span>
-                    <span class="btn-loading" style="display:none;">登录中...</span>
+                    <span class="btn-text" data-i18n="login">登录</span>
+                    <span class="btn-loading" style="display:none;" data-i18n="logging_in">登录中...</span>
                 </button>
                 <p id="login-error" class="error-msg"></p>
             </form>
@@ -55,15 +55,33 @@
                         <rect width="32" height="32" rx="8" fill="#4F46E5"/>
                         <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <span>API 中转服务 <span id="version-badge" class="version-badge">v1.1.0</span></span>
+                    <span>API Relay Service <span id="version-badge" class="version-badge">v1.2.0</span></span>
                 </div>
             </div>
             <div class="nav-right">
                 <span class="server-status">
                     <span class="status-dot"></span>
-                    <span class="status-text">服务运行中</span>
+                    <span class="status-text" data-i18n="service_running">服务运行中</span>
                 </span>
-                <button id="logout-btn" class="btn btn-ghost">退出登录</button>
+                <div class="lang-selector">
+                    <button id="lang-btn" class="btn btn-ghost" onclick="toggleLangDropdown()" title="Language">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="lang-current-label" data-i18n="lang_name_zh">中文</span>
+                    </button>
+                    <div id="lang-dropdown" class="lang-dropdown" style="display:none;">
+                        <div class="lang-option active" data-lang="zh" onclick="selectLanguage('zh')">
+                            <span data-i18n="lang_name_zh">中文</span>
+                        </div>
+                        <div class="lang-option" data-lang="en" onclick="selectLanguage('en')">
+                            <span data-i18n="lang_name_en">English</span>
+                        </div>
+                    </div>
+                </div>
+                <button id="logout-btn" class="btn btn-ghost" data-i18n="logout">退出登录</button>
             </div>
         </header>
 
@@ -78,19 +96,19 @@
                             <rect x="3" y="14" width="7" height="7" rx="1"/>
                             <rect x="14" y="14" width="7" height="7" rx="1"/>
                         </svg>
-                        <span>仪表板</span>
+                        <span data-i18n="dashboard">仪表板</span>
                     </a>
                     <a href="#" data-page="keys" class="nav-link">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
                         </svg>
-                        <span>密钥管理</span>
+                        <span data-i18n="key_management">密钥管理</span>
                     </a>
                     <a href="#" data-page="models" class="nav-link">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                         </svg>
-                        <span>模型配置</span>
+                        <span data-i18n="model_config">模型配置</span>
                     </a>
                     <a href="#" data-page="logs" class="nav-link">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -100,7 +118,7 @@
                             <line x1="16" y1="17" x2="8" y2="17"/>
                             <polyline points="10 9 9 9 8 9"/>
                         </svg>
-                        <span>请求日志</span>
+                        <span data-i18n="request_logs">请求日志</span>
                     </a>
                     <a href="#" data-page="stats" class="nav-link">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -108,14 +126,14 @@
                             <line x1="12" y1="20" x2="12" y2="4"/>
                             <line x1="6" y1="20" x2="6" y2="14"/>
                         </svg>
-                        <span>统计报表</span>
+                        <span data-i18n="stats_report">统计报表</span>
                     </a>
                     <a href="#" data-page="settings" class="nav-link">
                         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"/>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                         </svg>
-                        <span>系统设置</span>
+                        <span data-i18n="settings">系统设置</span>
                     </a>
                 </nav>
             </aside>
@@ -125,15 +143,24 @@
                 <!-- 仪表板 -->
                 <section id="dashboard-section" class="section active">
                     <div class="section-header">
-                        <h2>仪表板</h2>
-                        <button class="btn btn-secondary" onclick="refreshDashboard()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                                <polyline points="23 4 23 10 17 10"/>
-                                <polyline points="1 20 1 14 7 14"/>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                            </svg>
-                            刷新
-                        </button>
+                        <h2 data-i18n="dashboard">仪表板</h2>
+                        <div class="dashboard-header-right">
+                            <div class="server-time-card">
+                                <span class="server-time-sync">
+                                    <span class="sync-dot" id="server-time-sync-dot"></span>
+                                    <span id="server-time-sync-text" data-i18n="not_synced">未同步</span>
+                                </span>
+                                <span class="server-time-value" id="server-time-display">--:--:--</span>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="refreshDashboard()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <polyline points="23 4 23 10 17 10"/>
+                                    <polyline points="1 20 1 14 7 14"/>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                </svg>
+                                <span data-i18n="refresh">刷新</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="stats-grid">
@@ -145,7 +172,7 @@
                                 </svg>
                             </div>
                             <div class="stat-content">
-                                <span class="stat-label">今日请求</span>
+                                <span class="stat-label" data-i18n="today_requests">今日请求</span>
                                 <span class="stat-value" id="requests-today">0</span>
                                 <span class="stat-change" id="requests-change">--</span>
                             </div>
@@ -157,7 +184,7 @@
                                 </svg>
                             </div>
                             <div class="stat-content">
-                                <span class="stat-label">今日 Token</span>
+                                <span class="stat-label" data-i18n="today_tokens">今日 Token</span>
                                 <span class="stat-value" id="tokens-today">0</span>
                                 <span class="stat-change" id="tokens-change">--</span>
                             </div>
@@ -172,7 +199,7 @@
                                 </svg>
                             </div>
                             <div class="stat-content">
-                                <span class="stat-label">活跃密钥</span>
+                                <span class="stat-label" data-i18n="active_keys">活跃密钥</span>
                                 <span class="stat-value" id="active-keys">0</span>
                                 <span class="stat-change" id="keys-change">--</span>
                             </div>
@@ -186,7 +213,7 @@
                                 </svg>
                             </div>
                             <div class="stat-content">
-                                <span class="stat-label">错误率</span>
+                                <span class="stat-label" data-i18n="error_rate">错误率</span>
                                 <span class="stat-value" id="error-rate">0%</span>
                                 <span class="stat-change" id="error-change">--</span>
                             </div>
@@ -195,23 +222,23 @@
 
                     <div class="stats-detailed-grid">
                         <div class="stat-card">
-                            <span class="stat-label">今日输入 Token</span>
+                            <span class="stat-label" data-i18n="today_input_tokens">今日输入 Token</span>
                             <span class="stat-value" id="input-tokens-today">0</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">今日输出 Token</span>
+                            <span class="stat-label" data-i18n="today_output_tokens">今日输出 Token</span>
                             <span class="stat-value" id="output-tokens-today">0</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">输入/输出比</span>
+                            <span class="stat-label" data-i18n="input_output_ratio">输入/输出比</span>
                             <span class="stat-value" id="input-output-ratio">0</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">平均响应时间</span>
+                            <span class="stat-label" data-i18n="avg_response_time">平均响应时间</span>
                             <span class="stat-value" id="avg-response-time-today">--ms</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">活跃IP数</span>
+                            <span class="stat-label" data-i18n="active_ips">活跃IP数</span>
                             <span class="stat-value" id="active-ips-today">0</span>
                         </div>
                     </div>
@@ -219,31 +246,31 @@
                     <!-- 实时监控卡片 -->
                     <div class="realtime-monitor" id="realtime-monitor-section" >
                         <div class="section-header">
-                            <h3>实时监控</h3>
+                            <h3 data-i18n="realtime_monitor">实时监控</h3>
                             <button class="btn btn-secondary btn-sm" onclick="refreshRealtimeStats()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                     <polyline points="23 4 23 10 17 10"/>
                                     <polyline points="1 20 1 14 7 14"/>
                                     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                                 </svg>
-                                刷新
+                                <span data-i18n="refresh">刷新</span>
                             </button>
                         </div>
                         <div class="stats-grid">
                             <div class="realtime-widget">
-                                <div class="widget-title">最近1分钟请求数</div>
+                                <div class="widget-title" data-i18n="requests_last_min">最近1分钟请求数</div>
                                 <div class="widget-value" id="requests-last-minute">0</div>
-                                <div class="widget-label">活跃请求</div>
+                                <div class="widget-label" data-i18n="active_requests">活跃请求</div>
                             </div>
                             <div class="realtime-widget realtime-widget-pink">
-                                <div class="widget-title">最近5分钟请求速率</div>
+                                <div class="widget-title" data-i18n="requests_last_5min">最近5分钟请求速率</div>
                                 <div class="widget-value" id="requests-per-minute">0</div>
-                                <div class="widget-label">请求/分钟</div>
+                                <div class="widget-label" data-i18n="req_per_min">请求/分钟</div>
                             </div>
                             <div class="realtime-widget realtime-widget-cyan">
-                                <div class="widget-title">平均响应时间</div>
+                                <div class="widget-title" data-i18n="avg_response_time">平均响应时间</div>
                                 <div class="widget-value" id="avg-response-recent">--ms</div>
-                                <div class="widget-label">最近5分钟</div>
+                                <div class="widget-label" data-i18n="last_5min">最近5分钟</div>
                             </div>
                         </div>
                     </div>
@@ -251,16 +278,16 @@
                     <div class="dashboard-row">
                         <div class="dashboard-col">
                             <div class="card-header">
-                                <h3>今日活跃用户</h3>
+                                <h3 data-i18n="top_users_today">今日活跃用户</h3>
                             </div>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>用户</th>
-                                            <th>请求数</th>
-                                            <th>Token 消耗</th>
-                                            <th>状态</th>
+                                            <th data-i18n="user">用户</th>
+                                            <th data-i18n="request_count">请求数</th>
+                                            <th data-i18n="token_usage">Token 消耗</th>
+                                            <th data-i18n="status">状态</th>
                                         </tr>
                                     </thead>
                                     <tbody id="top-users-table"></tbody>
@@ -269,16 +296,16 @@
                         </div>
                         <div class="dashboard-col">
                             <div class="card-header">
-                                <h3>热门模型排行</h3>
+                                <h3 data-i18n="top_models">热门模型排行</h3>
                             </div>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>模型</th>
-                                            <th>请求数</th>
-                                            <th>平均响应</th>
-                                            <th>状态</th>
+                                            <th data-i18n="model">模型</th>
+                                            <th data-i18n="request_count">请求数</th>
+                                            <th data-i18n="avg_response">平均响应</th>
+                                            <th data-i18n="status">状态</th>
                                         </tr>
                                     </thead>
                                     <tbody id="top-models-table"></tbody>
@@ -291,42 +318,42 @@
                 <!-- 密钥管理 -->
                 <section id="keys-section" class="section">
                     <div class="section-header">
-                        <h2>密钥管理</h2>
+                        <h2 data-i18n="key_management">密钥管理</h2>
                         <button id="create-key-btn" class="btn btn-primary">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                                 <line x1="12" y1="5" x2="12" y2="19"/>
                                 <line x1="5" y1="12" x2="19" y2="12"/>
                             </svg>
-                            创建密钥
+                            <span data-i18n="create_key">创建密钥</span>
                         </button>
                     </div>
 
                     <!-- 创建密钥表单 -->
                     <div id="create-key-form" class="form-panel" style="display:none;">
                         <div class="panel-header">
-                            <h3>创建新密钥</h3>
+                            <h3 data-i18n="create_key">创建新密钥</h3>
                             <button class="btn-close" onclick="hideCreateKeyForm()">×</button>
                         </div>
                         <form id="new-key-form" class="form-grid">
                             <div class="form-group">
-                                <label for="key-name">密钥名称 *</label>
-                                <input type="text" id="key-name" placeholder="例如：生产环境密钥" required>
+                                <label for="key-name" data-i18n="key_name_req">密钥名称 *</label>
+                                <input type="text" id="key-name" data-i18n-placeholder="ph_key_name" placeholder="例如：生产环境密钥" required>
                             </div>
                             <div class="form-group">
-                                <label for="key-rate-limit">限流（请求/分钟）</label>
+                                <label for="key-rate-limit" data-i18n="rate_limit_rpm">限流（请求/分钟）</label>
                                 <input type="number" id="key-rate-limit" value="60" min="1" max="10000">
                             </div>
                             <div class="form-group">
-                                <label for="key-expiry">过期时间</label>
+                                <label for="key-expiry" data-i18n="expiry">过期时间</label>
                                 <input type="datetime-local" id="key-expiry">
                             </div>
                             <div class="form-group">
-                                <label for="key-description">备注说明</label>
-                                <input type="text" id="key-description" placeholder="可选描述信息">
+                                <label for="key-description" data-i18n="remarks">备注说明</label>
+                                <input type="text" id="key-description" data-i18n-placeholder="ph_description" placeholder="可选描述信息">
                             </div>
                             <div class="form-group form-actions-grid">
-                                <button type="submit" class="btn btn-primary">创建密钥</button>
-                                <button type="button" class="btn btn-secondary" onclick="hideCreateKeyForm()">取消</button>
+                                <button type="submit" class="btn btn-primary" data-i18n="create_key">创建密钥</button>
+                                <button type="button" class="btn btn-secondary" onclick="hideCreateKeyForm()" data-i18n="cancel">取消</button>
                             </div>
                         </form>
                     </div>
@@ -336,14 +363,14 @@
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>名称</th>
-                                    <th>密钥 ID</th>
-                                    <th>创建时间</th>
-                                    <th>过期时间</th>
-                                    <th>限流</th>
-                                    <th>使用统计</th>
-                                    <th>状态</th>
-                                    <th>操作</th>
+                                    <th data-i18n="name">名称</th>
+                                    <th data-i18n="key_id_header">密钥 ID</th>
+                                    <th data-i18n="created_at">创建时间</th>
+                                    <th data-i18n="expires_at">过期时间</th>
+                                    <th data-i18n="rate_limit_header">限流</th>
+                                    <th data-i18n="usage_stats_header">使用统计</th>
+                                    <th data-i18n="status">状态</th>
+                                    <th data-i18n="operations_header">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="keys-table"></tbody>
@@ -355,19 +382,19 @@
                 <div id="show-key-modal" class="modal" style="display:none;">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h3>API密钥</h3>
+                            <h3 data-i18n="api_key">API密钥</h3>
                             <button class="btn-close" onclick="closeShowKeyModal()">×</button>
                         </div>
                         <div class="modal-body">
                             <div class="form-group">
-                                <label>密钥名称</label>
+                                <label data-i18n="key_name">密钥名称</label>
                                 <input type="text" id="show-key-name" readonly class="form-control-readonly">
                             </div>
                             <div class="form-group">
-                                <label>API密钥</label>
+                                <label data-i18n="api_key">API密钥</label>
                                 <div style="display: flex; gap: 8px;">
                                     <input type="text" id="show-key-value" readonly class="form-control-readonly" style="flex: 1;">
-                                    <button type="button" class="btn btn-secondary" onclick="copyApiKey()">复制</button>
+                                    <button type="button" class="btn btn-secondary" onclick="copyApiKey()" data-i18n="copy">复制</button>
                                 </div>
                             </div>
                         </div>
@@ -378,30 +405,30 @@
                 <div id="edit-key-modal" class="modal" style="display:none;">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h3>编辑密钥配置</h3>
+                            <h3 data-i18n="edit_key_config">编辑密钥配置</h3>
                             <button class="btn-close" onclick="closeEditKeyModal()">×</button>
                         </div>
                         <div class="modal-body">
                             <form id="edit-key-form" class="form-grid">
                                 <input type="hidden" id="edit-key-id">
                                 <div class="form-group">
-                                    <label for="edit-key-name">密钥名称</label>
+                                    <label for="edit-key-name" data-i18n="key_name">密钥名称</label>
                                     <input type="text" id="edit-key-name" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="edit-key-rate-limit">限流（请求/分钟）</label>
+                                    <label for="edit-key-rate-limit" data-i18n="rate_limit_rpm">限流（请求/分钟）</label>
                                     <input type="number" id="edit-key-rate-limit" min="1" max="10000" required>
                                 </div>
                                 <div class="form-group">
-                                    <label>API密钥</label>
+                                    <label data-i18n="api_key">API密钥</label>
                                     <div style="display: flex; gap: 8px;">
                                         <input type="text" id="edit-key-encoded" readonly class="form-control-readonly" style="flex: 1;">
-                                        <button type="button" class="btn btn-secondary" onclick="copyPlainTextKeyFromEdit()">复制</button>
+                                        <button type="button" class="btn btn-secondary" onclick="copyPlainTextKeyFromEdit()" data-i18n="copy">复制</button>
                                     </div>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="submit" class="btn btn-primary">保存</button>
-                                    <button type="button" class="btn btn-secondary" onclick="closeEditKeyModal()">取消</button>
+                                    <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
+                                    <button type="button" class="btn btn-secondary" onclick="closeEditKeyModal()" data-i18n="cancel">取消</button>
                                 </div>
                             </form>
                         </div>
@@ -412,24 +439,24 @@
                 <div id="password-confirm-modal" class="modal" style="display:none;">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h3>确认修改密码</h3>
+                            <h3 data-i18n="confirm_password">确认修改密码</h3>
                             <button class="btn-close" onclick="closePasswordConfirmModal()">×</button>
                         </div>
                         <div class="modal-body">
-                            <p style="color: var(--text-muted); margin-bottom: 16px;">
+                            <p style="color: var(--text-muted); margin-bottom: 16px;" data-i18n="confirm_password_hint">
                                 修改密码是敏感操作，请输入当前管理员密码确认身份。
                             </p>
                             <div class="form-group">
-                                <label for="confirm-current-password">当前密码</label>
-                                <input type="password" id="confirm-current-password" placeholder="输入当前管理员密码">
+                                <label for="confirm-current-password" data-i18n="current_password">当前密码</label>
+                                <input type="password" id="confirm-current-password" data-i18n-placeholder="input_password" placeholder="输入当前管理员密码">
                             </div>
                             <div class="form-group">
-                                <label for="confirm-new-password">新密码</label>
+                                <label for="confirm-new-password" data-i18n="new_password">新密码</label>
                                 <input type="password" id="confirm-new-password" readonly class="form-control-readonly">
                             </div>
                             <div class="form-actions">
-                                <button type="button" class="btn btn-primary" onclick="confirmPasswordChange()">确认修改</button>
-                                <button type="button" class="btn btn-secondary" onclick="closePasswordConfirmModal()">取消</button>
+                                <button type="button" class="btn btn-primary" onclick="confirmPasswordChange()" data-i18n="confirm_change">确认修改</button>
+                                <button type="button" class="btn btn-secondary" onclick="closePasswordConfirmModal()" data-i18n="cancel">取消</button>
                             </div>
                         </div>
                     </div>
@@ -438,38 +465,38 @@
                 <!-- 模型配置 -->
                 <section id="models-section" class="section">
                     <div class="section-header">
-                        <h2>模型配置（三步管理）</h2>
+                        <h2 data-i18n="model_config_three_steps">模型配置（三步管理）</h2>
                     </div>
 
                     <!-- 三步标签页 -->
                     <div class="tab-container">
                         <div class="tab-buttons">
-                            <button class="tab-btn active" onclick="switchModelTab('sources')">① 源API配置</button>
-                            <button class="tab-btn" onclick="switchModelTab('virtual')">② 虚拟模型ID</button>
-                            <button class="tab-btn" onclick="switchModelTab('bindings')">③ 绑定关系</button>
+                            <button class="tab-btn active" onclick="switchModelTab('sources')" data-i18n="source_api_step1">① 源API配置</button>
+                            <button class="tab-btn" onclick="switchModelTab('virtual')" data-i18n="virtual_model_step2">② 虚拟模型ID</button>
+                            <button class="tab-btn" onclick="switchModelTab('bindings')" data-i18n="binding_step3">③ 绑定关系</button>
                         </div>
 
                         <!-- 源API配置 -->
                         <div id="tab-sources" class="tab-content active">
                             <div class="tab-header">
-                                <h3>源API配置</h3>
+                                <h3 data-i18n="source_api_config">源API配置</h3>
                                 <button class="btn btn-primary btn-sm" onclick="showAddSourceModal()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                         <line x1="12" y1="5" x2="12" y2="19"/>
                                         <line x1="5" y1="12" x2="19" y2="12"/>
                                     </svg>
-                                    添加源API
+                                    <span data-i18n="add_source_api">添加源API</span>
                                 </button>
                             </div>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>名称</th>
-                                            <th>Base URL</th>
-                                            <th>API Key</th>
-                                            <th>状态</th>
-                                            <th>操作</th>
+                                            <th data-i18n="name">名称</th>
+                                            <th data-i18n="base_url">Base URL</th>
+                                            <th data-i18n="api_key">API Key</th>
+                                            <th data-i18n="status">状态</th>
+                                            <th data-i18n="operations">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="sources-table"></tbody>
@@ -480,24 +507,24 @@
                         <!-- 虚拟模型ID -->
                         <div id="tab-virtual" class="tab-content">
                             <div class="tab-header">
-                                <h3>虚拟模型ID</h3>
+                                <h3 data-i18n="virtual_model_id">虚拟模型ID</h3>
                                 <button class="btn btn-primary btn-sm" onclick="showAddVirtualModelModal()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                         <line x1="12" y1="5" x2="12" y2="19"/>
                                         <line x1="5" y1="12" x2="19" y2="12"/>
                                     </svg>
-                                    创建模型ID
+                                    <span data-i18n="create_model_id">创建模型ID</span>
                                 </button>
                             </div>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>模型ID</th>
-                                            <th>名称</th>
-                                            <th>描述</th>
-                                            <th>状态</th>
-                                            <th>操作</th>
+                                            <th data-i18n="model_id">模型ID</th>
+                                            <th data-i18n="name">名称</th>
+                                            <th data-i18n="description">描述</th>
+                                            <th data-i18n="status">状态</th>
+                                            <th data-i18n="operations_header">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="virtual-models-table"></tbody>
@@ -508,25 +535,25 @@
                         <!-- 绑定关系 -->
                         <div id="tab-bindings" class="tab-content">
                             <div class="tab-header">
-                                <h3>绑定关系</h3>
+                                <h3 data-i18n="binding_relationship">绑定关系</h3>
                                 <button class="btn btn-primary btn-sm" onclick="showAddBindingModal()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                         <line x1="12" y1="5" x2="12" y2="19"/>
                                         <line x1="5" y1="12" x2="19" y2="12"/>
                                     </svg>
-                                    创建绑定
+                                    <span data-i18n="create_binding">创建绑定</span>
                                 </button>
                             </div>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>虚拟模型</th>
-                                            <th>源API</th>
-                                            <th>源模型</th>
-                                            <th>优先级</th>
-                                            <th>状态</th>
-                                            <th>操作</th>
+                                            <th data-i18n="virtual_model">虚拟模型</th>
+                                            <th data-i18n="source_api">源API</th>
+                                            <th data-i18n="source_model">源模型</th>
+                                            <th data-i18n="priority">优先级</th>
+                                            <th data-i18n="status">状态</th>
+                                            <th data-i18n="operations_header">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="bindings-table"></tbody>
@@ -539,44 +566,52 @@
                 <!-- 请求日志 -->
                 <section id="logs-section" class="section">
                     <div class="section-header">
-                        <h2>请求日志</h2>
+                        <h2 data-i18n="request_logs">请求日志</h2>
                         <div class="header-actions">
-                            <button id="clear-logs-btn" class="btn btn-danger" onclick="clearLogs()">清空日志</button>
+                            <button id="export-logs-btn" class="btn btn-secondary" onclick="exportLogs()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                <span data-i18n="export_logs">导出日志</span>
+                            </button>
+                            <button id="clear-logs-btn" class="btn btn-danger" onclick="clearLogs()"><span data-i18n="clear_logs">清空日志</span></button>
                         </div>
                     </div>
 
                     <div class="filter-panel">
                         <form id="logs-filter-form" class="filter-grid">
                             <div class="form-group">
-                                <label for="log-key-id">密钥 ID</label>
-                                <input type="text" id="log-key-id" placeholder="筛选密钥">
+                                <label for="log-key-id" data-i18n="log_key_id">密钥 ID</label>
+                                <input type="text" id="log-key-id" placeholder="筛选密钥" data-i18n-placeholder="ph_key_id">
                             </div>
                             <div class="form-group">
-                                <label for="log-model">模型</label>
-                                <input type="text" id="log-model" placeholder="筛选模型">
+                                <label for="log-model" data-i18n="model">模型</label>
+                                <input type="text" id="log-model" placeholder="筛选模型" data-i18n-placeholder="ph_model">
                             </div>
                             <div class="form-group">
-                                <label for="log-status">状态码</label>
+                                <label for="log-status" data-i18n="status_code">状态码</label>
                                 <select id="log-status">
-                                    <option value="">全部</option>
-                                    <option value="200">200 - 成功</option>
-                                    <option value="400">400 - 请求错误</option>
-                                    <option value="401">401 - 认证失败</option>
-                                    <option value="429">429 - 限流</option>
-                                    <option value="500">500 - 服务器错误</option>
+                                    <option value="" data-i18n="all_status">全部</option>
+                                    <option value="200"><span data-i18n="status_200">200 - 成功</span></option>
+                                    <option value="400"><span data-i18n="status_400">400 - 请求错误</span></option>
+                                    <option value="401"><span data-i18n="status_401">401 - 认证失败</span></option>
+                                    <option value="429"><span data-i18n="status_429">429 - 限流</span></option>
+                                    <option value="500"><span data-i18n="status_500">500 - 服务器错误</span></option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="log-start-date">开始日期</label>
+                                <label for="log-start-date" data-i18n="start_date">开始日期</label>
                                 <input type="datetime-local" id="log-start-date">
                             </div>
                             <div class="form-group">
-                                <label for="log-end-date">结束日期</label>
+                                <label for="log-end-date" data-i18n="end_date">结束日期</label>
                                 <input type="datetime-local" id="log-end-date">
                             </div>
                             <div class="form-group filter-actions">
-                                <button type="submit" class="btn btn-primary">筛选</button>
-                                <button type="button" class="btn btn-secondary" onclick="resetLogFilters()">重置</button>
+                                <button type="submit" class="btn btn-primary" data-i18n="filter">筛选</button>
+                                <button type="button" class="btn btn-secondary" onclick="resetLogFilters()" data-i18n="reset">重置</button>
                             </div>
                         </form>
                     </div>
@@ -585,14 +620,14 @@
                         <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>时间</th>
-                                    <th>客户端 IP</th>
-                                    <th>密钥</th>
-                                    <th>模型</th>
-                                    <th>状态码</th>
-                                    <th>输入/输出 Token</th>
-                                    <th>响应时间</th>
-                                    <th>错误信息</th>
+                                    <th data-i18n="time">时间</th>
+                                    <th data-i18n="client_ip">客户端 IP</th>
+                                    <th data-i18n="key_id">密钥</th>
+                                    <th data-i18n="model">模型</th>
+                                    <th data-i18n="status_code">状态码</th>
+                                    <th data-i18n="input_output_tokens">输入/输出 Token</th>
+                                    <th data-i18n="response_time">响应时间</th>
+                                    <th data-i18n="error_message">错误信息</th>
                                 </tr>
                             </thead>
                             <tbody id="logs-table"></tbody>
@@ -600,77 +635,77 @@
                     </div>
 
                     <div class="pagination">
-                        <button id="logs-prev" class="btn btn-secondary" onclick="prevLogsPage()">上一页</button>
-                        <span id="logs-page-info">第 1 页</span>
-                        <button id="logs-next" class="btn btn-secondary" onclick="nextLogsPage()">下一页</button>
+                        <button id="logs-prev" class="btn btn-secondary" onclick="prevLogsPage()"><span data-i18n="prev_page">上一页</span></button>
+                        <span id="logs-page-info"></span>
+                        <button id="logs-next" class="btn btn-secondary" onclick="nextLogsPage()"><span data-i18n="next_page">下一页</span></button>
                     </div>
                 </section>
 
                 <!-- 统计报表 -->
                 <section id="stats-section" class="section">
                     <div class="section-header">
-                        <h2>统计报表</h2>
+                        <h2 data-i18n="stats_report">统计报表</h2>
                     </div>
 
                     <div class="filter-panel">
                         <form id="stats-filter-form" class="filter-grid">
                             <div class="form-group">
-                                <label for="stats-key-id">密钥 ID</label>
-                                <input type="text" id="stats-key-id" placeholder="留空查看全部">
+                                <label for="stats-key-id" data-i18n="cleanup_key_id">密钥 ID</label>
+                                <input type="text" id="stats-key-id" data-i18n-placeholder="ph_key_id_stats" placeholder="留空查看全部">
                             </div>
                             <div class="form-group">
-                                <label for="stats-start-date">开始日期</label>
+                                <label for="stats-start-date" data-i18n="cleanup_start_date">开始日期</label>
                                 <input type="date" id="stats-start-date">
                             </div>
                             <div class="form-group">
-                                <label for="stats-end-date">结束日期</label>
+                                <label for="stats-end-date" data-i18n="cleanup_end_date">结束日期</label>
                                 <input type="date" id="stats-end-date">
                             </div>
                             <div class="form-group filter-actions">
-                                <button type="submit" class="btn btn-primary">查询</button>
+                                <button type="submit" class="btn btn-primary" data-i18n="query">查询</button>
                             </div>
                         </form>
                     </div>
 
                     <div class="stats-summary">
                         <div class="summary-card">
-                            <span class="summary-label">总请求数</span>
+                            <span class="summary-label" data-i18n="total_requests">总请求数</span>
                             <span class="summary-value" id="total-requests">0</span>
                         </div>
                         <div class="summary-card">
-                            <span class="summary-label">总输入 Token</span>
+                            <span class="summary-label" data-i18n="total_input_tokens">总输入 Token</span>
                             <span class="summary-value" id="total-input-tokens">0</span>
                         </div>
                         <div class="summary-card">
-                            <span class="summary-label">总输出 Token</span>
+                            <span class="summary-label" data-i18n="total_output_tokens">总输出 Token</span>
                             <span class="summary-value" id="total-output-tokens">0</span>
                         </div>
                         <div class="summary-card">
-                            <span class="summary-label">总错误数</span>
+                            <span class="summary-label" data-i18n="total_errors">总错误数</span>
                             <span class="summary-value" id="total-errors">0</span>
                         </div>
                         <div class="summary-card">
-                            <span class="summary-label">总 Token</span>
+                            <span class="summary-label" data-i18n="total_tokens">总 Token</span>
                             <span class="summary-value" id="total-tokens">0</span>
                         </div>
                         <div class="summary-card">
-                            <span class="summary-label">平均请求/用户</span>
+                            <span class="summary-label" data-i18n="avg_req_per_user">平均请求/用户</span>
                             <span class="summary-value" id="avg-requests-per-user">0</span>
                         </div>
                     </div>
 
                     <div class="stats-row">
                         <div class="stats-col">
-                            <h3>按日期统计</h3>
+                            <h3 data-i18n="by_date">按日期统计</h3>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>日期</th>
-                                            <th>请求数</th>
-                                            <th>输入 Token</th>
-                                            <th>输出 Token</th>
-                                            <th>错误数</th>
+                                            <th data-i18n="date">日期</th>
+                                            <th data-i18n="request_count">请求数</th>
+                                            <th data-i18n="input_token">输入 Token</th>
+                                            <th data-i18n="output_token">输出 Token</th>
+                                            <th data-i18n="error_count">错误数</th>
                                         </tr>
                                     </thead>
                                     <tbody id="daily-stats-table"></tbody>
@@ -678,16 +713,16 @@
                             </div>
                         </div>
                         <div class="stats-col">
-                            <h3>按用户统计</h3>
+                            <h3 data-i18n="by_user">按用户统计</h3>
                             <div class="table-container">
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>密钥 ID</th>
-                                            <th>请求数</th>
-                                            <th>输入 Token</th>
-                                            <th>输出 Token</th>
-                                            <th>错误数</th>
+                                            <th data-i18n="key_id_header">密钥 ID</th>
+                                            <th data-i18n="request_count">请求数</th>
+                                            <th data-i18n="input_token">输入 Token</th>
+                                            <th data-i18n="output_token">输出 Token</th>
+                                            <th data-i18n="error_count">错误数</th>
                                         </tr>
                                     </thead>
                                     <tbody id="user-stats-table"></tbody>
@@ -700,72 +735,72 @@
                 <!-- 系统设置 -->
                 <section id="settings-section" class="section">
                     <div class="section-header">
-                        <h2>系统设置</h2>
+                        <h2 data-i18n="settings">系统设置</h2>
                     </div>
 
                     <div class="settings-grid">
                         <div class="settings-card">
-                            <h3>限流配置</h3>
+                            <h3 data-i18n="rate_limit_config">限流配置</h3>
                             <form id="rate-limit-form" class="form-grid">
                                 <div class="form-group">
-                                    <label for="global-rpm">全局限流（请求/分钟）</label>
+                                    <label for="global-rpm" data-i18n="global_rpm">全局限流（请求/分钟）</label>
                                     <input type="number" id="global-rpm" value="1000" min="1">
                                 </div>
                                 <div class="form-group">
-                                    <label for="default-key-rpm">默认密钥限流（请求/分钟）</label>
+                                    <label for="default-key-rpm" data-i18n="default_key_rpm">默认密钥限流（请求/分钟）</label>
                                     <input type="number" id="default-key-rpm" value="60" min="1">
                                 </div>
                                 <div class="form-group">
-                                    <button type="submit" class="btn btn-primary">保存限流配置</button>
+                                    <button type="submit" class="btn btn-primary" data-i18n="save_rate_limit">保存限流配置</button>
                                 </div>
                             </form>
                         </div>
 
                         <div class="settings-card">
-                            <h3>安全设置</h3>
+                            <h3 data-i18n="security_settings">安全设置</h3>
                             <form id="admin-password-form" class="form-grid">
                                 <div class="form-group full-width">
-                                    <label for="new-admin-password">新管理员密码</label>
-                                    <input type="password" id="new-admin-password" placeholder="输入新密码">
+                                    <label for="new-admin-password" data-i18n="new_admin_password_label">新管理员密码</label>
+                                    <input type="password" id="new-admin-password" data-i18n-placeholder="ph_new_password" placeholder="输入新密码">
                                 </div>
                                 <div class="form-group full-width">
-                                    <button type="submit" class="btn btn-primary">修改密码</button>
+                                    <button type="submit" class="btn btn-primary" data-i18n="change_password">修改密码</button>
                                 </div>
                             </form>
                         </div>
 
                         <div class="settings-card">
-                            <h3>服务信息</h3>
+                            <h3 data-i18n="service_info">服务信息</h3>
                             <div class="info-list">
                                 <div class="info-item">
-                                    <span class="info-label">服务状态</span>
-                                    <span class="info-value status-active">运行中</span>
+                                    <span class="info-label" data-i18n="service_status">服务状态</span>
+                                    <span class="info-value status-active" data-i18n="running">运行中</span>
                                 </div>
                                 <div class="info-item">
-                                    <span class="info-label">监听地址</span>
+                                    <span class="info-label" data-i18n="listen_address">监听地址</span>
                                     <span class="info-value">0.0.0.0:8080</span>
                                 </div>
                                 <div class="info-item">
-                                    <span class="info-label">API 版本</span>
+                                    <span class="info-label" data-i18n="api_version_label">API 版本</span>
                                     <span class="info-value">v1</span>
                                 </div>
                             </div>
                         </div>
 
                         <div class="settings-card danger-zone">
-                            <h3>⚠️ 数据清理</h3>
-                            <p class="warning-text">以下操作不可撤销，请谨慎使用！</p>
+                            <h3 data-i18n="data_cleanup">⚠️ 数据清理</h3>
+                            <p class="warning-text" data-i18n="warning_text">以下操作不可撤销，请谨慎使用！</p>
                             <div class="cleanup-buttons">
-                                <button class="btn btn-danger" onclick="showCleanupLogsModal()">清理请求日志</button>
-                                <button class="btn btn-danger" onclick="showCleanupStatsModal()">清理统计数据</button>
-                                <button class="btn btn-warning" onclick="cleanupInactiveKeys()">清理禁用密钥</button>
-                                <button class="btn btn-warning" onclick="cleanupOrphanLogs()">清理孤立日志</button>
+                                <button class="btn btn-danger" onclick="showCleanupLogsModal()"><span data-i18n="clear_request_logs">清理请求日志</span></button>
+                                <button class="btn btn-danger" onclick="showCleanupStatsModal()"><span data-i18n="cleanup_stats">清理统计数据</span></button>
+                                <button class="btn btn-warning" onclick="cleanupInactiveKeys()"><span data-i18n="clear_disabled_keys">清理禁用密钥</span></button>
+                                <button class="btn btn-warning" onclick="cleanupOrphanLogs()"><span data-i18n="clear_orphan_logs">清理孤立日志</span></button>
                             </div>
                         </div>
 
                         <div class="settings-card">
-                            <h3>数据库备份与恢复</h3>
-                            <p class="warning-text">定期备份数据以防丢失</p>
+                            <h3 data-i18n="db_backup">数据库备份与恢复</h3>
+                            <p class="warning-text" data-i18n="backup_reminder">定期备份数据以防丢失</p>
                             <div class="cleanup-buttons">
                                 <button class="btn btn-primary" onclick="backupDatabase()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -773,7 +808,7 @@
                                         <polyline points="7 10 12 15 17 10"/>
                                         <line x1="12" y1="15" x2="12" y2="3"/>
                                     </svg>
-                                    创建备份
+                                    <span data-i18n="create_backup">创建备份</span>
                                 </button>
                                 <button class="btn btn-secondary" onclick="exportDatabase()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -781,7 +816,7 @@
                                         <polyline points="7 10 12 15 17 10"/>
                                         <line x1="12" y1="15" x2="12" y2="3"/>
                                     </svg>
-                                    导出数据库
+                                    <span data-i18n="export_db">导出数据库</span>
                                 </button>
                                 <button class="btn btn-warning" onclick="document.getElementById('import-database-file').click()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -789,44 +824,44 @@
                                         <polyline points="17 8 12 3 7 8"/>
                                         <line x1="12" y1="3" x2="12" y2="15"/>
                                     </svg>
-                                    导入数据库
+                                    <span data-i18n="import_db">导入数据库</span>
                                 </button>
                                 <input type="file" id="import-database-file" accept=".zip" style="display: none;" onchange="importDatabase(event)">
                             </div>
                         </div>
 
                         <div class="settings-card">
-                            <h3>隐私过滤设置</h3>
+                            <h3 data-i18n="privacy_filter_settings">隐私过滤设置</h3>
                             <form id="privacy-filter-form" class="form-grid">
                                 <div class="form-group">
                                     <label>
                                         <input type="checkbox" id="privacy-enabled" onchange="savePrivacySettings()">
-                                        启用隐私过滤
+                                        <span data-i18n="enable_privacy_filter">启用隐私过滤</span>
                                     </label>
-                                    <span class="form-hint">过滤源API返回的敏感信息（如提供商详情、元数据等）</span>
+                                    <span class="form-hint" data-i18n="filter_hint">过滤源API返回的敏感信息（如提供商详情、元数据等）</span>
                                 </div>
                                 <div class="form-group">
                                     <label>
                                         <input type="checkbox" id="filter-metadata" checked onchange="savePrivacySettings()">
-                                        过滤元数据（ID、创建时间等）
+                                        <span data-i18n="filter_metadata">过滤元数据（ID、创建时间等）</span>
                                     </label>
                                 </div>
                                 <div class="form-group">
                                     <label>
                                         <input type="checkbox" id="filter-usage-details" checked onchange="savePrivacySettings()">
-                                        过滤使用详情（仅保留基本token统计）
+                                        <span data-i18n="filter_usage_details">过滤使用详情（仅保留基本token统计）</span>
                                     </label>
                                 </div>
                                 <div class="form-group">
                                     <label>
                                         <input type="checkbox" id="filter-provider-info" checked onchange="savePrivacySettings()">
-                                        过滤提供商信息
+                                        <span data-i18n="filter_provider_info">过滤提供商信息</span>
                                     </label>
                                 </div>
                                 <div class="form-group">
                                     <label>
                                         <input type="checkbox" id="filter-error-details" onchange="savePrivacySettings()">
-                                        过滤错误详情（使用自定义错误消息）
+                                        <span data-i18n="filter_error_details">过滤错误详情（使用自定义错误消息）</span>
                                     </label>
                                 </div>
                             </form>
@@ -841,7 +876,7 @@
     <div id="key-detail-modal" class="modal" style="display:none;">
         <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>密钥详情</h3>
+                <h3 data-i18n="key_detail">密钥详情</h3>
                 <button class="btn-close" onclick="closeKeyDetailModal()">×</button>
             </div>
             <div id="key-detail-content"></div>
@@ -852,40 +887,40 @@
     <div id="cleanup-logs-modal" class="modal" style="display:none;">
         <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>清理请求日志</h3>
+                <h3 data-i18n="cleanup_logs_title">清理请求日志</h3>
                 <button class="btn-close" onclick="closeCleanupLogsModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="cleanup-logs-form" class="form-grid">
                     <div class="form-group">
-                        <label for="cleanup-key-id">密钥 ID（可选）</label>
+                        <label for="cleanup-key-id"><span data-i18n="cleanup_key_id">密钥 ID（可选）</span></label>
                         <input type="text" id="cleanup-key-id" placeholder="留空则不限制密钥">
                     </div>
                     <div class="form-group">
-                        <label for="cleanup-model">模型（可选）</label>
+                        <label for="cleanup-model"><span data-i18n="cleanup_model">模型（可选）</span></label>
                         <input type="text" id="cleanup-model" placeholder="留空则不限制模型">
                     </div>
                     <div class="form-group">
-                        <label for="cleanup-start-date">起始日期（可选）</label>
+                        <label for="cleanup-start-date"><span data-i18n="cleanup_start_date">起始日期（可选）</span></label>
                         <input type="date" id="cleanup-start-date">
                     </div>
                     <div class="form-group">
-                        <label for="cleanup-end-date">结束日期（可选）</label>
+                        <label for="cleanup-end-date"><span data-i18n="cleanup_end_date">结束日期（可选）</span></label>
                         <input type="date" id="cleanup-end-date">
                     </div>
                     <div class="form-group full-width">
-                        <label for="cleanup-status">状态过滤（可选）</label>
+                        <label for="cleanup-status"><span data-i18n="cleanup_status_filter">状态过滤（可选）</span></label>
                         <select id="cleanup-status">
-                            <option value="">不过滤</option>
-                            <option value="success">成功请求</option>
-                            <option value="error">错误请求</option>
+                            <option value=""><span data-i18n="no_filter">不过滤</span></option>
+                            <option value="success"><span data-i18n="success_requests">成功请求</span></option>
+                            <option value="error"><span data-i18n="error_requests">错误请求</span></option>
                         </select>
                     </div>
                     <div class="form-group full-width">
-                        <p class="form-hint">⚠️ 警告：此操作将永久删除符合条件的日志记录，无法恢复！</p>
+                        <p class="form-hint"><span data-i18n="cleanup_warning_logs">⚠️ 警告：此操作将永久删除符合条件的日志记录，无法恢复！</span></p>
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-danger">确认清理</button>
+                        <button type="submit" class="btn btn-danger"><span data-i18n="confirm_cleanup">确认清理</span></button>
                     </div>
                 </form>
             </div>
@@ -896,28 +931,28 @@
     <div id="cleanup-stats-modal" class="modal" style="display:none;">
         <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>清理统计数据</h3>
+                <h3 data-i18n="cleanup_stats_title">清理统计数据</h3>
                 <button class="btn-close" onclick="closeCleanupStatsModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="cleanup-stats-form" class="form-grid">
                     <div class="form-group">
-                        <label for="cleanup-stats-key-id">密钥 ID（可选）</label>
+                        <label for="cleanup-stats-key-id"><span data-i18n="cleanup_key_id">密钥 ID（可选）</span></label>
                         <input type="text" id="cleanup-stats-key-id" placeholder="留空则不限制密钥">
                     </div>
                     <div class="form-group">
-                        <label for="cleanup-stats-start-date">起始日期（可选）</label>
+                        <label for="cleanup-stats-start-date"><span data-i18n="cleanup_start_date">起始日期（可选）</span></label>
                         <input type="date" id="cleanup-stats-start-date">
                     </div>
                     <div class="form-group">
-                        <label for="cleanup-stats-end-date">结束日期（可选）</label>
+                        <label for="cleanup-stats-end-date"><span data-i18n="cleanup_end_date">结束日期（可选）</span></label>
                         <input type="date" id="cleanup-stats-end-date">
                     </div>
                     <div class="form-group full-width">
-                        <p class="form-hint">⚠️ 警告：此操作将永久删除符合条件的统计数据，无法恢复！</p>
+                        <p class="form-hint"><span data-i18n="cleanup_warning_stats">⚠️ 警告：此操作将永久删除符合条件的统计数据，无法恢复！</span></p>
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-danger">确认清理</button>
+                        <button type="submit" class="btn btn-danger"><span data-i18n="confirm_cleanup">确认清理</span></button>
                     </div>
                 </form>
             </div>
@@ -928,36 +963,52 @@
     <div id="add-source-modal" class="modal" style="display:none;">
         <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>添加源API配置</h3>
+                <h3 data-i18n="add_source_api">添加源 API 配置</h3>
                 <button class="btn-close" onclick="closeAddSourceModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="add-source-form" class="form-grid">
                     <div class="form-group full-width">
-                        <label for="source-name">名称 *</label>
-                        <input type="text" id="source-name" placeholder="例如：OpenRouter API" required>
+                        <label for="source-name" data-i18n="name_required">名称 *</label>
+                        <input type="text" id="source-name" placeholder="例如：OpenRouter API" data-i18n-placeholder="ph_source_name" required>
                     </div>
                     <div class="form-group full-width">
                         <label for="source-base-url">Base URL *</label>
-                        <input type="url" id="source-base-url" placeholder="https://openrouter.ai/api/v1" required>
+                        <input type="url" id="source-base-url" placeholder="https://openrouter.ai/api/v1" data-i18n-placeholder="ph_base_url" required>
                     </div>
                     <div class="form-group full-width">
                         <label for="source-api-key">API Key *</label>
-                        <input type="text" id="source-api-key" placeholder="sk-or-xxx" required>
+                        <input type="text" id="source-api-key" placeholder="sk-or-xxx" data-i18n-placeholder="ph_api_key" required>
                     </div>
                     <div class="form-group full-width">
-                        <label>支持的模型</label>
+                        <label data-i18n="supported_models">支持的模型</label>
                         <div id="source-models-container" class="tag-input-container">
                             <div class="tag-list" id="source-models-list"></div>
-                            <div class="tag-input-row">
-                                <input type="text" id="source-model-input" placeholder="输入模型名称，按回车添加">
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="addSourceModelTag()">添加</button>
+                            <div class="tag-input-row" style="gap: 8px; flex-wrap: wrap;">
+                                <input type="text" id="source-model-input" placeholder="输入模型名称，按回车添加" data-i18n-placeholder="ph_model_input" style="flex: 1; min-width: 200px;">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="addSourceModelTag()" data-i18n="manual_add">手动添加</button>
+                                <button type="button" class="btn btn-sm btn-success" onclick="fetchAndShowSourceModels()" id="fetch-models-btn" style="display: none;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                                    <span data-i18n="fetch_models">从源API获取模型</span>
+                                </button>
                             </div>
                         </div>
-                        <span class="form-hint">添加此源API支持的模型名称（可选）</span>
+                        <div id="source-models-picker" style="display: none; margin-top: 12px; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: var(--bg-secondary);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="font-weight: 500;" data-i18n="models_picker_title">从源API获取到以下模型，勾选后添加：</span>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="selectAllModels()" data-i18n="select_all">全选</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="deselectAllModels()" data-i18n="deselect_all">取消全选</button>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="addSelectedModels()" data-i18n="add_selected">添加勾选的模型</button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="closeModelPicker()" data-i18n="close">关闭</button>
+                                </div>
+                            </div>
+                            <div id="models-picker-list" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
+                        </div>
+                        <span class="form-hint" data-i18n="supported_models_hint">添加此源API支持的模型名称（可选），填写 Base URL 和 API Key 后可从源API自动获取</span>
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-primary">保存</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="save">保存</button>
                     </div>
                 </form>
             </div>
@@ -968,25 +1019,25 @@
     <div id="add-virtual-model-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>创建虚拟模型ID</h3>
+                <h3 data-i18n="create_virtual_model">创建虚拟模型ID</h3>
                 <button class="btn-close" onclick="closeAddVirtualModelModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="add-virtual-model-form" class="form-grid">
                     <div class="form-group">
-                        <label for="virtual-model-id">模型ID（可选）</label>
+                        <label for="virtual-model-id" data-i18n="model_id_optional">模型ID（可选）</label>
                         <input type="text" id="virtual-model-id" placeholder="留空则自动生成">
                     </div>
                     <div class="form-group">
-                        <label for="virtual-model-name">名称 *</label>
+                        <label for="virtual-model-name" data-i18n="name_required">名称 *</label>
                         <input type="text" id="virtual-model-name" placeholder="例如：GPT-4 Model" required>
                     </div>
                     <div class="form-group full-width">
-                        <label for="virtual-model-description">描述</label>
+                        <label for="virtual-model-description" data-i18n="description">描述</label>
                         <input type="text" id="virtual-model-description" placeholder="可选描述">
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-primary">创建</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="create_virtual_model">创建</button>
                     </div>
                 </form>
             </div>
@@ -997,36 +1048,36 @@
     <div id="add-binding-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>创建绑定关系</h3>
+                <h3 data-i18n="create_binding">创建绑定关系</h3>
                 <button class="btn-close" onclick="closeAddBindingModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="add-binding-form" class="form-grid">
                     <div class="form-group full-width">
-                        <label for="binding-virtual-model">虚拟模型 *</label>
+                        <label for="binding-virtual-model" data-i18n="virtual_model">虚拟模型</label> *
                         <select id="binding-virtual-model" required onchange="updateSourceModelOptions()">
-                            <option value="">选择虚拟模型</option>
+                            <option value="" data-i18n="select_virtual_model">选择虚拟模型</option>
                         </select>
                     </div>
                     <div class="form-group full-width">
-                        <label for="binding-source">源API *</label>
+                        <label for="binding-source" data-i18n="source_api">源API</label> *
                         <select id="binding-source" required onchange="updateSourceModelOptions()">
-                            <option value="">选择源API</option>
+                            <option value="" data-i18n="select_source_api">选择源API</option>
                         </select>
                     </div>
                     <div class="form-group full-width">
-                        <label for="binding-source-model">源模型 *</label>
+                        <label for="binding-source-model" data-i18n="source_model">源模型</label> *
                         <select id="binding-source-model" required>
-                            <option value="">选择源模型</option>
+                            <option value="" data-i18n="select_source_model">选择源模型</option>
                         </select>
-                        <span class="form-hint">源模型列表来自源API配置，可在编辑源API时修改</span>
+                        <span class="form-hint" data-i18n="source_model_hint">源模型列表来自源API配置，可在编辑源API时修改</span>
                     </div>
                     <div class="form-group">
-                        <label for="binding-priority">优先级</label>
+                        <label for="binding-priority" data-i18n="priority">优先级</label>
                         <input type="number" id="binding-priority" value="0" min="0">
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-primary">创建绑定</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="create_binding">创建绑定</button>
                     </div>
                 </form>
             </div>
@@ -1037,35 +1088,35 @@
     <div id="update-binding-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>更新绑定关系（换绑）</h3>
+                <h3 data-i18n="update_binding">更新绑定关系（换绑）</h3>
                 <button class="btn-close" onclick="closeUpdateBindingModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="update-binding-form" class="form-grid">
                     <div class="form-group full-width">
-                        <label for="update-binding-virtual-model">虚拟模型</label>
+                        <label for="update-binding-virtual-model" data-i18n="virtual_model">虚拟模型</label>
                         <select id="update-binding-virtual-model" onchange="updateSourceModelOptions()">
-                            <option value="">选择虚拟模型</option>
+                            <option value="" data-i18n="select_virtual_model">选择虚拟模型</option>
                         </select>
                     </div>
                     <div class="form-group full-width">
-                        <label for="update-binding-source">源API</label>
+                        <label for="update-binding-source" data-i18n="source_api">源API</label>
                         <select id="update-binding-source" onchange="updateSourceModelOptions()">
-                            <option value="">选择源API</option>
+                            <option value="" data-i18n="select_source_api">选择源API</option>
                         </select>
                     </div>
                     <div class="form-group full-width">
-                        <label for="update-binding-source-model">源模型</label>
+                        <label for="update-binding-source-model" data-i18n="source_model">源模型</label>
                         <select id="update-binding-source-model">
-                            <option value="">选择源模型</option>
+                            <option value="" data-i18n="select_source_model">选择源模型</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="update-binding-priority">优先级</label>
+                        <label for="update-binding-priority" data-i18n="priority">优先级</label>
                         <input type="number" id="update-binding-priority" value="0" min="0">
                     </div>
                     <div class="form-group full-width">
-                        <button type="submit" class="btn btn-primary">更新绑定</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="update_binding">更新绑定</button>
                     </div>
                 </form>
             </div>
@@ -1078,12 +1129,12 @@
     <!-- 页脚版本信息 -->
     <footer class="app-footer">
         <div class="footer-content">
-            <span>API 中转服务 <span id="footer-version">v1.1.0</span></span>
+            <span><span data-i18n="api_relay_service">API 中转服务</span> <span id="footer-version">v1.2.0</span></span>
             <span class="separator">|</span>
-            <span id="copyright-text">Copyright © 2026 PLXT</span>
+            <span id="copyright-text" data-i18n="copyright">Copyright © 2026 PLXT</span>
         </div>
     </footer>
 
-    <script src="/admin/static/js/app.js?v=16"></script>
+    <script src="/admin/static/js/app.js?v=30"></script>
 </body>
 </html>
